@@ -9,11 +9,6 @@ const transporter = nodemailer.createTransport({
   },
 })
 
-// Generate a 6-digit verification code
-export function generateVerificationCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString()
-}
-
 // Send verification email
 export async function sendVerificationEmail(
   email: string,

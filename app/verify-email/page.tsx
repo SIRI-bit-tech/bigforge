@@ -18,6 +18,7 @@ export default function VerifyEmailPage() {
   
   const [code, setCode] = useState("")
   const [error, setError] = useState("")
+  const [successMessage, setSuccessMessage] = useState("")
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
   const [resending, setResending] = useState(false)
@@ -33,15 +34,16 @@ export default function VerifyEmailPage() {
     if (!email) return
 
     setError("")
+    setSuccessMessage("")
     setLoading(true)
 
     try {
       await verifyEmail(email, code)
       setSuccess(true)
       
-      // Redirect to login after 2 seconds
+      // Redirect to onboarding after 2 seconds
       setTimeout(() => {
-        router.push("/login?verified=true")
+        router.push("/onboarding")
       }, 2000)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verification failed")
@@ -54,14 +56,14 @@ export default function VerifyEmailPage() {
     if (!email) return
 
     setError("")
+    setSuccessMessage("")
     setResending(true)
 
     try {
       await resendVerificationCode(email)
-      setError("")
-      // Show success message briefly
-      setError("New verification code sent to your email")
-      setTimeout(() => setError(""), 3000)
+      setSuccessMessage("New verification code sent to your email")
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(""), 3000)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to resend code")
     } finally {
@@ -96,7 +98,7 @@ export default function VerifyEmailPage() {
                 </div>
                 <h2 className="text-xl font-semibold text-foreground mb-2">Email verified!</h2>
                 <p className="text-muted-foreground mb-4">
-                  Your email has been successfully verified. Redirecting to login...
+                  Your email has been successfully verified. Redirecting to complete your profile...
                 </p>
               </div>
             ) : (
@@ -105,6 +107,13 @@ export default function VerifyEmailPage() {
                   <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
                     <AlertCircle className="h-4 w-4" />
                     {error}
+                  </div>
+                )}
+
+                {successMessage && (
+                  <div className="flex items-center gap-2 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 border border-green-200">
+                    <CheckCircle className="h-4 w-4" />
+                    {successMessage}
                   </div>
                 )}
 

@@ -120,115 +120,116 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Auth actions
   login: async (email: string, password: string) => {
-    // In a real app, this would call an API endpoint to verify credentials
-    // For now, we'll simulate the login process
-    const user = get().users.find((u) => u.email === email)
-    if (!user) {
-      throw new Error("Invalid credentials")
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Login failed')
     }
 
-    // Check if email is verified
-    if (!user.emailVerified) {
-      throw new Error("Please verify your email address before logging in")
+    // Set authenticated user
+    const user: User = {
+      ...data.user,
+      createdAt: new Date(data.user.createdAt),
+      updatedAt: new Date(data.user.updatedAt),
     }
 
-    // In production, password verification would happen on the server
-    // For now, we'll simulate successful login
     set({ currentUser: user, isAuthenticated: true })
     return user
   },
 
   register: async (email: string, password: string, name: string, role: UserRole) => {
-    try {
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password, name, role }),
-      })
+    const response = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password, name, role }),
+    })
 
-      const data = await response.json()
+    const data = await response.json()
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Registration failed')
-      }
-
-      // Add user to local store (in production, this would come from your database)
-      const newUser: User = {
-        ...data.user,
-        password: undefined, // Never store password in client state
-        createdAt: new Date(data.user.createdAt),
-        updatedAt: new Date(data.user.updatedAt),
-      }
-
-      set((state) => ({
-        users: [...state.users, newUser],
-      }))
-
-      return { user: newUser, needsVerification: data.needsVerification }
-    } catch (error) {
-      throw error
+    if (!response.ok) {
+      throw new Error(data.error || 'Registration failed')
     }
+
+    // Add user to local store (in production, this would come from your database)
+    const newUser: User = {
+      ...data.user,
+      password: undefined, // Never store password in client state
+      createdAt: new Date(data.user.createdAt),
+      updatedAt: new Date(data.user.updatedAt),
+    }
+
+    set((state) => ({
+      users: [...state.users, newUser],
+    }))
+
+    return { user: newUser, needsVerification: data.needsVerification }
   },
 
   verifyEmail: async (email: string, code: string) => {
-    try {
-      const response = await fetch('/api/auth/verify-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, code }),
-      })
+    const response = await fetch('/api/auth/verify-email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, code }),
+    })
 
-      const data = await response.json()
+    const data = await response.json()
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Verification failed')
+    if (!response.ok) {
+      throw new Error(data.error || 'Verification failed')
+    }
+
+    // Update user in local store and set as authenticated
+    const verifiedUser = get().users.find(u => u.email === email)
+    if (verifiedUser) {
+      const updatedUser = {
+        ...verifiedUser,
+        emailVerified: true,
+        verificationCode: undefined,
+        verificationCodeExpiry: undefined,
+        updatedAt: new Date(),
       }
 
-      // Update user in local store
       set((state) => ({
         users: state.users.map((u) =>
-          u.email === email
-            ? {
-                ...u,
-                emailVerified: true,
-                verificationCode: undefined,
-                verificationCodeExpiry: undefined,
-                updatedAt: new Date(),
-              }
-            : u
+          u.email === email ? updatedUser : u
         ),
+        // Automatically log in the user after verification
+        currentUser: updatedUser,
+        isAuthenticated: true,
       }))
-
-      return true
-    } catch (error) {
-      throw error
     }
+
+    return true
   },
 
   resendVerificationCode: async (email: string) => {
-    try {
-      const response = await fetch('/api/auth/resend-code', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
-      })
+    const response = await fetch('/api/auth/resend-code', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    })
 
-      const data = await response.json()
+    const data = await response.json()
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to resend code')
-      }
-
-      return
-    } catch (error) {
-      throw error
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to resend code')
     }
+
+    return
   },
 
   logout: () => {

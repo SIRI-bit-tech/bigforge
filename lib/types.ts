@@ -36,6 +36,12 @@ export interface User {
   name: string
   role: UserRole
   companyId: string
+  password?: string // Hashed password
+  emailVerified: boolean
+  verificationCode?: string
+  verificationCodeExpiry?: Date
+  passwordResetToken?: string
+  passwordResetExpiry?: Date
   createdAt: Date
   updatedAt: Date
 }

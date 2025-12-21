@@ -32,7 +32,9 @@ interface AppState {
 
   // Auth actions
   login: (email: string, password: string) => Promise<User>
-  register: (email: string, password: string, name: string, role: UserRole) => Promise<User>
+  register: (email: string, password: string, name: string, role: UserRole) => Promise<{ user: User; needsVerification: boolean }>
+  verifyEmail: (email: string, code: string) => Promise<boolean>
+  resendVerificationCode: (email: string) => Promise<void>
   logout: () => void
 
   // Company actions
@@ -84,252 +86,19 @@ interface AppState {
 // Helper function to generate IDs
 const generateId = () => Math.random().toString(36).substring(2, 15)
 
-// Seed data for testing
+// Seed data for testing - Remove in production
 const seedData = () => {
-  const contractors: User[] = [
-    {
-      id: "user-1",
-      email: "john@buildcorp.com",
-      name: "John Mitchell",
-      role: "CONTRACTOR",
-      companyId: "company-1",
-      createdAt: new Date("2024-01-01"),
-      updatedAt: new Date("2024-01-01"),
-    },
-  ]
+  const contractors: User[] = []
 
-  const subcontractors: User[] = [
-    {
-      id: "user-2",
-      email: "sarah@electricpro.com",
-      name: "Sarah Johnson",
-      role: "SUBCONTRACTOR",
-      companyId: "company-2",
-      createdAt: new Date("2024-01-05"),
-      updatedAt: new Date("2024-01-05"),
-    },
-    {
-      id: "user-3",
-      email: "mike@plumbmaster.com",
-      name: "Mike Davis",
-      role: "SUBCONTRACTOR",
-      companyId: "company-3",
-      createdAt: new Date("2024-01-10"),
-      updatedAt: new Date("2024-01-10"),
-    },
-    {
-      id: "user-4",
-      email: "lisa@hvacexperts.com",
-      name: "Lisa Chen",
-      role: "SUBCONTRACTOR",
-      companyId: "company-4",
-      createdAt: new Date("2024-01-15"),
-      updatedAt: new Date("2024-01-15"),
-    },
-  ]
+  const subcontractors: User[] = []
 
-  const companies: Company[] = [
-    {
-      id: "company-1",
-      name: "BuildCorp General Contractors",
-      type: "General Contractor",
-      address: "123 Main St, Los Angeles, CA 90001",
-      phone: "(555) 123-4567",
-      website: "https://buildcorp.example.com",
-      description: "Leading general contractor specializing in commercial construction projects",
-      trades: [],
-      certifications: [],
-      createdAt: new Date("2024-01-01"),
-    },
-    {
-      id: "company-2",
-      name: "ElectricPro Solutions",
-      type: "Electrical Contractor",
-      address: "456 Oak Ave, Los Angeles, CA 90002",
-      phone: "(555) 234-5678",
-      website: "https://electricpro.example.com",
-      description: "Commercial electrical contractor with 20+ years of experience",
-      trades: ["ELECTRICAL"],
-      certifications: [],
-      createdAt: new Date("2024-01-05"),
-    },
-    {
-      id: "company-3",
-      name: "PlumbMaster Inc",
-      type: "Plumbing Contractor",
-      address: "789 Elm St, Los Angeles, CA 90003",
-      phone: "(555) 345-6789",
-      website: "https://plumbmaster.example.com",
-      description: "Expert plumbing services for commercial and residential projects",
-      trades: ["PLUMBING"],
-      certifications: [],
-      createdAt: new Date("2024-01-10"),
-    },
-    {
-      id: "company-4",
-      name: "HVAC Experts LLC",
-      type: "HVAC Contractor",
-      address: "321 Pine Rd, Los Angeles, CA 90004",
-      phone: "(555) 456-7890",
-      website: "https://hvacexperts.example.com",
-      description: "Full-service HVAC installation and maintenance",
-      trades: ["HVAC"],
-      certifications: [],
-      createdAt: new Date("2024-01-15"),
-    },
-  ]
+  const companies: Company[] = []
 
-  const projects: Project[] = [
-    {
-      id: "project-1",
-      title: "Downtown Office Complex - Phase 1",
-      description:
-        "Construction of a 5-story office building with underground parking. Requires electrical, plumbing, HVAC, and interior finishing.",
-      location: "Downtown Los Angeles, CA",
-      budget: 5000000,
-      startDate: new Date("2024-06-01"),
-      endDate: new Date("2025-12-31"),
-      deadline: new Date("2024-05-15"),
-      status: "PUBLISHED",
-      createdBy: "user-1",
-      trades: ["ELECTRICAL", "PLUMBING", "HVAC", "DRYWALL", "FLOORING"],
-      createdAt: new Date("2024-03-01"),
-      updatedAt: new Date("2024-03-01"),
-    },
-    {
-      id: "project-2",
-      title: "Riverside Shopping Center Renovation",
-      description:
-        "Complete renovation of existing 50,000 sq ft shopping center including storefront updates, HVAC system replacement, and parking lot resurfacing.",
-      location: "Riverside, CA",
-      budget: 2500000,
-      startDate: new Date("2024-07-01"),
-      endDate: new Date("2025-03-31"),
-      deadline: new Date("2024-06-01"),
-      status: "PUBLISHED",
-      createdBy: "user-1",
-      trades: ["ELECTRICAL", "PLUMBING", "HVAC", "PAINTING", "CONCRETE"],
-      createdAt: new Date("2024-03-15"),
-      updatedAt: new Date("2024-03-15"),
-    },
-  ]
+  const projects: Project[] = []
 
-  const invitations: Invitation[] = [
-    {
-      id: "inv-1",
-      projectId: "project-1",
-      subcontractorId: "user-2",
-      status: "ACCEPTED",
-      sentAt: new Date("2024-03-02"),
-      respondedAt: new Date("2024-03-03"),
-    },
-    {
-      id: "inv-2",
-      projectId: "project-1",
-      subcontractorId: "user-3",
-      status: "ACCEPTED",
-      sentAt: new Date("2024-03-02"),
-      respondedAt: new Date("2024-03-04"),
-    },
-    {
-      id: "inv-3",
-      projectId: "project-1",
-      subcontractorId: "user-4",
-      status: "PENDING",
-      sentAt: new Date("2024-03-02"),
-    },
-  ]
+  const invitations: Invitation[] = []
 
-  const bids: Bid[] = [
-    {
-      id: "bid-1",
-      projectId: "project-1",
-      subcontractorId: "user-2",
-      totalAmount: 450000,
-      status: "SUBMITTED",
-      notes: "Includes all electrical work for floors 1-5 and parking structure. Premium grade materials specified.",
-      submittedAt: new Date("2024-03-10"),
-      updatedAt: new Date("2024-03-10"),
-      lineItems: [
-        {
-          id: "li-1",
-          bidId: "bid-1",
-          description: "Main electrical panel installation and distribution",
-          quantity: 5,
-          unit: "floors",
-          unitPrice: 45000,
-          totalPrice: 225000,
-        },
-        {
-          id: "li-2",
-          bidId: "bid-1",
-          description: "Lighting fixtures and controls",
-          quantity: 250,
-          unit: "fixtures",
-          unitPrice: 500,
-          totalPrice: 125000,
-        },
-        {
-          id: "li-3",
-          bidId: "bid-1",
-          description: "Emergency backup generator system",
-          quantity: 1,
-          unit: "system",
-          unitPrice: 100000,
-          totalPrice: 100000,
-        },
-      ],
-      alternates: [
-        {
-          id: "alt-1",
-          bidId: "bid-1",
-          description: "LED upgrade for all lighting fixtures",
-          adjustmentAmount: 25000,
-          notes: "Higher upfront cost but 40% energy savings over 10 years",
-        },
-      ],
-    },
-    {
-      id: "bid-2",
-      projectId: "project-1",
-      subcontractorId: "user-3",
-      totalAmount: 380000,
-      status: "SUBMITTED",
-      notes: "Complete plumbing system for all floors including water supply, drainage, and fixtures.",
-      submittedAt: new Date("2024-03-12"),
-      updatedAt: new Date("2024-03-12"),
-      lineItems: [
-        {
-          id: "li-4",
-          bidId: "bid-2",
-          description: "Main water supply and distribution piping",
-          quantity: 5,
-          unit: "floors",
-          unitPrice: 35000,
-          totalPrice: 175000,
-        },
-        {
-          id: "li-5",
-          bidId: "bid-2",
-          description: "Drainage and waste system",
-          quantity: 5,
-          unit: "floors",
-          unitPrice: 28000,
-          totalPrice: 140000,
-        },
-        {
-          id: "li-6",
-          bidId: "bid-2",
-          description: "Bathroom fixtures and installation",
-          quantity: 25,
-          unit: "fixtures",
-          unitPrice: 2600,
-          totalPrice: 65000,
-        },
-      ],
-      alternates: [],
-    },
-  ]
+  const bids: Bid[] = []
 
   return {
     users: [...contractors, ...subcontractors],
@@ -351,30 +120,115 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Auth actions
   login: async (email: string, password: string) => {
+    // In a real app, this would call an API endpoint to verify credentials
+    // For now, we'll simulate the login process
     const user = get().users.find((u) => u.email === email)
     if (!user) {
       throw new Error("Invalid credentials")
     }
+
+    // Check if email is verified
+    if (!user.emailVerified) {
+      throw new Error("Please verify your email address before logging in")
+    }
+
+    // In production, password verification would happen on the server
+    // For now, we'll simulate successful login
     set({ currentUser: user, isAuthenticated: true })
     return user
   },
 
   register: async (email: string, password: string, name: string, role: UserRole) => {
-    const newUser: User = {
-      id: generateId(),
-      email,
-      name,
-      role,
-      companyId: "",
-      createdAt: new Date(),
-      updatedAt: new Date(),
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password, name, role }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Registration failed')
+      }
+
+      // Add user to local store (in production, this would come from your database)
+      const newUser: User = {
+        ...data.user,
+        password: undefined, // Never store password in client state
+        createdAt: new Date(data.user.createdAt),
+        updatedAt: new Date(data.user.updatedAt),
+      }
+
+      set((state) => ({
+        users: [...state.users, newUser],
+      }))
+
+      return { user: newUser, needsVerification: data.needsVerification }
+    } catch (error) {
+      throw error
     }
-    set((state) => ({
-      users: [...state.users, newUser],
-      currentUser: newUser,
-      isAuthenticated: true,
-    }))
-    return newUser
+  },
+
+  verifyEmail: async (email: string, code: string) => {
+    try {
+      const response = await fetch('/api/auth/verify-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, code }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Verification failed')
+      }
+
+      // Update user in local store
+      set((state) => ({
+        users: state.users.map((u) =>
+          u.email === email
+            ? {
+                ...u,
+                emailVerified: true,
+                verificationCode: undefined,
+                verificationCodeExpiry: undefined,
+                updatedAt: new Date(),
+              }
+            : u
+        ),
+      }))
+
+      return true
+    } catch (error) {
+      throw error
+    }
+  },
+
+  resendVerificationCode: async (email: string) => {
+    try {
+      const response = await fetch('/api/auth/resend-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to resend code')
+      }
+
+      return
+    } catch (error) {
+      throw error
+    }
   },
 
   logout: () => {

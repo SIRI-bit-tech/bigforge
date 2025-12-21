@@ -2,23 +2,33 @@
 
 import type React from "react"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { useStore } from "@/lib/store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Navbar } from "@/components/navbar"
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, CheckCircle } from "lucide-react"
 
 export default function LoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const login = useStore((state) => state.login)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [showVerifiedMessage, setShowVerifiedMessage] = useState(false)
+
+  useEffect(() => {
+    // Check if user just verified their email
+    if (searchParams.get("verified") === "true") {
+      setShowVerifiedMessage(true)
+      setTimeout(() => setShowVerifiedMessage(false), 5000)
+    }
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -29,7 +39,15 @@ export default function LoginPage() {
       await login(email, password)
       router.push("/dashboard")
     } catch (err) {
-      setError("Invalid email or password")
+      const errorMessage = err instanceof Error ? err.message : "Invalid email or password"
+      setError(errorMessage)
+      
+      // If error is about email verification, redirect to verify page
+      if (errorMessage.includes("verify your email")) {
+        setTimeout(() => {
+          router.push(`/verify-email?email=${encodeURIComponent(email)}`)
+        }, 2000)
+      }
     } finally {
       setLoading(false)
     }
@@ -46,6 +64,13 @@ export default function LoginPage() {
           </div>
 
           <div className="rounded-lg border border-border bg-card p-8 shadow-sm">
+            {showVerifiedMessage && (
+              <div className="flex items-center gap-2 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 mb-6">
+                <CheckCircle className="h-4 w-4" />
+                Email verified successfully! You can now log in.
+              </div>
+            )}
+            
             <form onSubmit={handleSubmit} className="space-y-6">
               {error && (
                 <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -89,12 +114,6 @@ export default function LoginPage() {
                 <Link href="/register" className="font-medium text-accent hover:underline">
                   Sign up
                 </Link>
-              </p>
-            </div>
-
-            <div className="mt-4 text-center">
-              <p className="text-xs text-muted-foreground">
-                Demo accounts: john@buildcorp.com or sarah@electricpro.com (any password)
               </p>
             </div>
           </div>

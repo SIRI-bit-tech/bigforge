@@ -55,7 +55,7 @@ export default function HomePage() {
                           EP
                         </div>
                         <div>
-                          <div className="text-sm font-medium">ElectricPro</div>
+                          <div className="text-sm font-medium">Contractor A</div>
                           <div className="text-xs text-muted-foreground">Electrical</div>
                         </div>
                       </div>
@@ -70,7 +70,7 @@ export default function HomePage() {
                           PM
                         </div>
                         <div>
-                          <div className="text-sm font-medium">PlumbMaster</div>
+                          <div className="text-sm font-medium">Contractor B</div>
                           <div className="text-xs text-muted-foreground">Plumbing</div>
                         </div>
                       </div>

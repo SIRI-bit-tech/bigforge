@@ -1,49 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { signJWT } from '@/lib/utils/jwt'
 import { db, users, verificationCodes } from '@/lib/db'
 import { eq, and, gt } from 'drizzle-orm'
-
-// Rate limiting store (in production, use Redis or a proper rate limiting service)
-const rateLimitStore = new Map<string, { count: number; resetTime: number }>()
-
-// Rate limiting configuration
-const RATE_LIMIT_WINDOW = 15 * 60 * 1000 // 15 minutes
-const RATE_LIMIT_MAX_ATTEMPTS = 10 // 10 verification attempts per window
-
-function getRateLimitKey(request: NextRequest): string {
-  const forwarded = request.headers.get('x-forwarded-for')
-  const ip = forwarded ? forwarded.split(',')[0] : request.headers.get('x-real-ip') || 'unknown'
-  return `verify:${ip}`
-}
-
-function checkRateLimit(key: string): { allowed: boolean; resetTime?: number } {
-  const now = Date.now()
-  const record = rateLimitStore.get(key)
-
-  if (!record || now > record.resetTime) {
-    rateLimitStore.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW })
-    return { allowed: true }
-  }
-
-  if (record.count >= RATE_LIMIT_MAX_ATTEMPTS) {
-    return { allowed: false, resetTime: record.resetTime }
-  }
-
-  record.count++
-  rateLimitStore.set(key, record)
-  return { allowed: true }
-}
+import { getRateLimitKey, checkRateLimit, RATE_LIMITS, formatTimeRemaining } from '@/lib/utils/rate-limit'
 
 export async function POST(request: NextRequest) {
   try {
-    // Apply rate limiting
-    const rateLimitKey = getRateLimitKey(request)
-    const rateLimit = checkRateLimit(rateLimitKey)
+    // Apply rate limiting using shared utility
+    const rateLimitKey = getRateLimitKey(request, RATE_LIMITS.EMAIL_VERIFICATION.keyPrefix)
+    const rateLimit = checkRateLimit(rateLimitKey, RATE_LIMITS.EMAIL_VERIFICATION)
     
     if (!rateLimit.allowed) {
-      const resetIn = Math.ceil((rateLimit.resetTime! - Date.now()) / 1000 / 60)
+      const resetIn = formatTimeRemaining(rateLimit.resetTime!)
       console.warn(`Rate limit exceeded for email verification from ${rateLimitKey}`)
       return NextResponse.json(
-        { error: `Too many verification attempts. Please try again in ${resetIn} minutes.` },
+        { error: `Too many verification attempts. Please try again in ${resetIn}.` },
         { status: 429 }
       )
     }
@@ -85,14 +56,16 @@ export async function POST(request: NextRequest) {
       .where(eq(users.email, email.toLowerCase()))
       .limit(1)
 
+    // Security: Don't reveal if user exists or not - use generic error for both cases
     if (!user) {
-      console.warn('Verification attempt for non-existent user:', {
-        email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-        timestamp: new Date().toISOString()
+      // Log for security monitoring without revealing user existence
+      console.warn('Verification attempt with invalid request:', {
+        timestamp: new Date().toISOString(),
+        ip: rateLimitKey.split(':')[1]
       })
       return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
+        { error: 'Invalid or expired verification code' },
+        { status: 400 }
       )
     }
 
@@ -119,10 +92,10 @@ export async function POST(request: NextRequest) {
       .limit(1)
 
     if (!verificationRecord) {
-      console.warn('Invalid or expired verification code:', {
+      console.warn('Invalid or expired verification code provided:', {
         userId: user.id,
-        email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        ip: rateLimitKey.split(':')[1]
       })
       return NextResponse.json(
         { error: 'Invalid or expired verification code' },
@@ -155,7 +128,16 @@ export async function POST(request: NextRequest) {
         timestamp: new Date().toISOString()
       })
 
-      return NextResponse.json({
+      // Generate JWT token for automatic login after verification
+      const tokenPayload = { 
+        userId: user.id, 
+        role: user.role,
+        companyId: user.companyId 
+      }
+      const token = signJWT(tokenPayload, '30d')
+
+      // Create response with user data
+      const response = NextResponse.json({
         success: true,
         message: 'Email verified successfully',
         user: {
@@ -164,8 +146,21 @@ export async function POST(request: NextRequest) {
           name: user.name,
           role: user.role,
           emailVerified: true,
+          companyId: user.companyId,
         }
       })
+
+      // Set httpOnly cookie with JWT token (auto-login after verification)
+      const isProduction = process.env.NODE_ENV === 'production'
+      response.cookies.set('auth-token', token, {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 30 * 24 * 60 * 60, // 30 days in seconds
+      })
+
+      return response
 
     } catch (dbError) {
       console.error('Database error during email verification:', dbError)

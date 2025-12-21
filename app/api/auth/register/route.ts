@@ -3,52 +3,19 @@ import { hashPassword, generateVerificationData, validatePasswordStrength } from
 import { sendVerificationEmail } from '@/lib/services/email'
 import { db, users, verificationCodes } from '@/lib/db'
 import { eq } from 'drizzle-orm'
-
-// Rate limiting store (in production, use Redis or a proper rate limiting service)
-const rateLimitStore = new Map<string, { count: number; resetTime: number }>()
-
-// Rate limiting configuration
-const RATE_LIMIT_WINDOW = 15 * 60 * 1000 // 15 minutes
-const RATE_LIMIT_MAX_ATTEMPTS = 5 // 5 attempts per window
-
-function getRateLimitKey(request: NextRequest): string {
-  // Use IP address for rate limiting
-  const forwarded = request.headers.get('x-forwarded-for')
-  const ip = forwarded ? forwarded.split(',')[0] : request.headers.get('x-real-ip') || 'unknown'
-  return `register:${ip}`
-}
-
-function checkRateLimit(key: string): { allowed: boolean; resetTime?: number } {
-  const now = Date.now()
-  const record = rateLimitStore.get(key)
-
-  if (!record || now > record.resetTime) {
-    // First attempt or window expired
-    rateLimitStore.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW })
-    return { allowed: true }
-  }
-
-  if (record.count >= RATE_LIMIT_MAX_ATTEMPTS) {
-    return { allowed: false, resetTime: record.resetTime }
-  }
-
-  // Increment count
-  record.count++
-  rateLimitStore.set(key, record)
-  return { allowed: true }
-}
+import { getRateLimitKey, checkRateLimit, RATE_LIMITS, formatTimeRemaining } from '@/lib/utils/rate-limit'
 
 export async function POST(request: NextRequest) {
   try {
-    // Apply rate limiting
-    const rateLimitKey = getRateLimitKey(request)
-    const rateLimit = checkRateLimit(rateLimitKey)
+    // Apply rate limiting using shared utility
+    const rateLimitKey = getRateLimitKey(request, RATE_LIMITS.REGISTRATION.keyPrefix)
+    const rateLimit = checkRateLimit(rateLimitKey, RATE_LIMITS.REGISTRATION)
     
     if (!rateLimit.allowed) {
-      const resetIn = Math.ceil((rateLimit.resetTime! - Date.now()) / 1000 / 60) // minutes
+      const resetIn = formatTimeRemaining(rateLimit.resetTime!)
       console.warn(`Rate limit exceeded for registration attempt from ${rateLimitKey}`)
       return NextResponse.json(
-        { error: `Too many registration attempts. Please try again in ${resetIn} minutes.` },
+        { error: `Too many registration attempts. Please try again in ${resetIn}.` },
         { status: 429 }
       )
     }

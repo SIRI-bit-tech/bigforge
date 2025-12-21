@@ -1,10 +1,17 @@
 import jwt, { SignOptions } from "jsonwebtoken"
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production"
+// Secure JWT secret retrieval - fails fast if not configured
+export function getJWTSecret(): string {
+  const secret = process.env.JWT_SECRET
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable is required but not configured. Please set JWT_SECRET in your environment variables.')
+  }
+  return secret
+}
 
 // JWT token utilities for GraphQL authentication
 export function signJWT(payload: object, expiresIn = "7d"): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn } as SignOptions)
+  return jwt.sign(payload, getJWTSecret(), { expiresIn } as SignOptions)
 }
 
 // Type guard to validate JWT payload structure
@@ -18,25 +25,5 @@ function isValidJWTPayload(payload: unknown): payload is { userId: string; role:
   )
 }
 
-export function verifyJWT(token: string): { userId: string; role: string; companyId?: string } | null {
-  try {
-    const decoded: unknown = jwt.verify(token, JWT_SECRET)
-    
-    // Runtime validation of payload structure
-    if (!isValidJWTPayload(decoded)) {
-      console.warn('JWT verification failed: Invalid payload structure')
-      return null
-    }
-    
-    return decoded
-  } catch (error) {
-    // Secure error logging - don't expose sensitive information
-    const isDevelopment = process.env.NODE_ENV === 'development'
-    if (isDevelopment && error instanceof Error) {
-      console.warn('[v0] JWT verification failed:', error.message)
-    } else {
-      console.warn('[v0] JWT verification failed: Invalid or expired token')
-    }
-    return null
-  }
-}
+// Note: verifyJWT has been moved to lib/services/auth.ts for better security validation
+// Import verifyJWT from '@/lib/services/auth' instead of this file

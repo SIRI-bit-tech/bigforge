@@ -1,6 +1,7 @@
 import type { YogaInitialContext } from "graphql-yoga"
 import { db } from "@/lib/db"
 import jwt from "jsonwebtoken"
+import { getJWTSecret } from "@/lib/utils/jwt"
 import {
   createUserLoader,
   createCompanyLoader,
@@ -31,7 +32,10 @@ export async function createContext(initialContext: YogaInitialContext): Promise
 
   if (token) {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as {
+      const decoded = jwt.verify(token, getJWTSecret(), {
+        issuer: 'bidforge',
+        audience: 'bidforge-users',
+      }) as {
         userId: string
         role: "CONTRACTOR" | "SUBCONTRACTOR"
       }

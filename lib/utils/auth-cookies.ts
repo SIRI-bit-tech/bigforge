@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { verifyJWT } from '@/lib/utils/jwt'
+import { verifyJWT } from '@/lib/services/auth'
 
 export interface AuthUser {
   userId: string

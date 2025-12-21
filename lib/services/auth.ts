@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { validatePasswordStrength } from '@/lib/validation/password'
 import { generateVerificationCode, generateVerificationData } from '@/lib/validation/verification-code'
+import { getJWTSecret } from '@/lib/utils/jwt'
 
 // This file should only be used on the server side
 // Client-side code should use API routes instead
@@ -19,12 +20,7 @@ export async function verifyPassword(password: string, hashedPassword: string): 
 
 // JWT token generation
 export function generateJWT(payload: { userId: string; role: string; companyId?: string }): string {
-  const secret = process.env.JWT_SECRET
-  if (!secret) {
-    throw new Error('JWT_SECRET is not configured')
-  }
-  
-  return jwt.sign(payload, secret, {
+  return jwt.sign(payload, getJWTSecret(), {
     expiresIn: '30d',
     issuer: 'bidforge',
     audience: 'bidforge-users',
@@ -45,12 +41,7 @@ function isValidJWTPayload(payload: unknown): payload is { userId: string; role:
 // JWT token verification
 export function verifyJWT(token: string): { userId: string; role: string; companyId?: string } | null {
   try {
-    const secret = process.env.JWT_SECRET
-    if (!secret) {
-      throw new Error('JWT_SECRET is not configured')
-    }
-    
-    const decoded: unknown = jwt.verify(token, secret, {
+    const decoded: unknown = jwt.verify(token, getJWTSecret(), {
       issuer: 'bidforge',
       audience: 'bidforge-users',
     })

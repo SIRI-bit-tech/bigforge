@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
 import { users } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
+import { getJWTSecret } from "@/lib/utils/jwt"
 
 export const authResolvers = {
   Mutation: {
@@ -35,7 +36,7 @@ export const authResolvers = {
         .returning()
 
       // Generate JWT token
-      const token = jwt.sign({ userId: newUser.id, role: newUser.role }, process.env.JWT_SECRET || "your-secret-key", {
+      const token = jwt.sign({ userId: newUser.id, role: newUser.role }, getJWTSecret(), {
         expiresIn: "30d",
       })
 
@@ -63,7 +64,7 @@ export const authResolvers = {
       }
 
       // Generate JWT token
-      const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET || "your-secret-key", {
+      const token = jwt.sign({ userId: user.id, role: user.role }, getJWTSecret(), {
         expiresIn: "30d",
       })
 

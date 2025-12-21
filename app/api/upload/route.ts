@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { storage } from "@/lib/storage/cloudinary"
-import { verifyJWT } from "@/lib/utils/jwt"
+import { verifyJWT } from "@/lib/services/auth"
 
 // File upload API route for blueprints and documents
 export async function POST(request: NextRequest) {

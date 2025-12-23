@@ -55,7 +55,20 @@ export default function SubmitBidPage({ params }: { params: Promise<{ id: string
         alternates: [], // For now, we'll keep it simple
       }
 
-      createBid(bidData)
+      // Submit bid via API
+      const response = await fetch('/api/bids', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(bidData),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to submit bid')
+      }
       
       toast({
         title: "Bid Submitted Successfully!",
@@ -68,7 +81,7 @@ export default function SubmitBidPage({ params }: { params: Promise<{ id: string
       console.error('Failed to submit bid:', error)
       toast({
         title: "Failed to Submit Bid",
-        description: "There was an error submitting your bid. Please try again.",
+        description: error instanceof Error ? error.message : "There was an error submitting your bid. Please try again.",
         variant: "destructive",
       })
     } finally {

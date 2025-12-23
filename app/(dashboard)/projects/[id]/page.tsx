@@ -16,28 +16,34 @@ import Link from "next/link"
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  const { projects, getBidsByProject, companies, users, publishProject, closeProject, loadProjects, currentUser } = useStore()
+  const { projects, companies, users, publishProject, closeProject, loadProjects, loadBids, currentUser } = useStore()
   const [loading, setLoading] = useState(true)
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
   const [viewDocumentsOpen, setViewDocumentsOpen] = useState(false)
+  const [projectBids, setProjectBids] = useState<any[]>([])
 
-  // Load projects on component mount
+  // Load projects and bids on component mount
   useEffect(() => {
     const loadData = async () => {
       try {
         await loadProjects()
+        
+        // Load bids for this project
+        if (currentUser) {
+          const bids = await loadBids(id)
+          setProjectBids(bids)
+        }
       } catch (error) {
-        console.error('Failed to load projects:', error)
+        console.error('Failed to load data:', error)
       } finally {
         setLoading(false)
       }
     }
     
     loadData()
-  }, [loadProjects])
+  }, [loadProjects, loadBids, id, currentUser])
 
   const project = projects.find((p) => p.id === id)
-  const projectBids = project ? getBidsByProject(project.id) : []
   
   // Check if current user is the project owner
   const isProjectOwner = currentUser && project && (project.createdBy === currentUser.id || project.createdById === currentUser.id)

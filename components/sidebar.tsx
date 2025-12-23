@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { LayoutDashboard, Folder, Users, MessageSquare, BarChart3, Inbox, ClipboardList, Settings } from "lucide-react"
 
-export function Sidebar() {
+export function Sidebar({ mobile = false }: { mobile?: boolean }) {
   const pathname = usePathname()
   const { currentUser, messages } = useStore()
 
@@ -39,13 +39,17 @@ export function Sidebar() {
 
   const links = currentUser.role === "CONTRACTOR" ? contractorLinks : subcontractorLinks
 
+  const sidebarClasses = mobile 
+    ? "flex w-full flex-col" 
+    : "hidden lg:flex w-64 flex-col border-r border-border bg-muted/30"
+
   return (
-    <aside className="hidden lg:flex w-64 flex-col border-r border-border bg-muted/30">
+    <aside className={sidebarClasses}>
       <div className="flex-1 overflow-y-auto py-6">
         <nav className="space-y-1 px-3">
           {links.map((link) => {
             const Icon = link.icon
-            const isActive = pathname === link.href || pathname.startsWith(link.href + "/")
+            const isActive = pathname === link.href || (pathname && pathname.startsWith(link.href + "/"))
             const showBadge = link.href === "/messages" && unreadCount > 0
 
             return (

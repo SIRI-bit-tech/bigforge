@@ -98,24 +98,36 @@ export const initSocket = (res: SocketServer) => {
     io.on('connection', async (socket: Socket) => {
       const socketAny = socket as any
       
+      console.log('🔌 New socket connection attempt')
+      
       // Authenticate socket on connection
       const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace('Bearer ', '')
       
+      console.log('🔑 Token found:', !!token)
+      
       if (!token) {
+        console.log('❌ No token provided')
         socket.emit('error', { message: 'Authentication required' })
         socket.disconnect()
         return
       }
 
       const isAuthenticated = await authenticateSocket(socket, token)
+      console.log('🔐 Authentication result:', isAuthenticated)
+      
       if (!isAuthenticated) {
+        console.log('❌ Authentication failed')
         socket.emit('error', { message: 'Invalid authentication token' })
         socket.disconnect()
         return
       }
 
+      console.log('✅ Socket authenticated for user:', socketAny.userId)
+
       // 1) Join user room - validate userId matches authenticated user
       socket.on('join-user-room', (userId: string) => {
+        console.log('👤 Join user room request:', userId, 'authenticated as:', socketAny.userId)
+        
         if (!socketAny.userId) {
           handleViolation(socket, 'Not authenticated')
           return
@@ -127,6 +139,7 @@ export const initSocket = (res: SocketServer) => {
         }
 
         socket.join(`user:${userId}`)
+        console.log('✅ User joined room:', `user:${userId}`)
       })
 
       // Join project room - validate project membership/permission
@@ -157,10 +170,12 @@ export const initSocket = (res: SocketServer) => {
           ...messageData,
           senderId: socketAny.userId, // Use authenticated user ID
           text: typeof messageData.text === 'string' ? messageData.text.trim() : '', // Sanitize message
+          sentAt: messageData.sentAt || new Date().toISOString(),
+          attachments: messageData.attachments || []
         }
 
         // Validate required fields
-        if (!sanitizedData.projectId || !sanitizedData.receiverId || !sanitizedData.text) {
+        if (!sanitizedData.projectId || !sanitizedData.receiverId) {
           handleViolation(socket, 'Invalid message data')
           return
         }
@@ -178,9 +193,16 @@ export const initSocket = (res: SocketServer) => {
           return
         }
 
-        // Broadcast to project room and receiver
-        socket.to(`project:${sanitizedData.projectId}`).emit('new-message', sanitizedData)
+        console.log('📤 Broadcasting message via socket to user:', sanitizedData.receiverId)
+        console.log('📤 Message data:', { id: sanitizedData.id, text: sanitizedData.text })
+        
+        // Broadcast to receiver's personal room (for real-time delivery)
         socket.to(`user:${sanitizedData.receiverId}`).emit('new-message', sanitizedData)
+        
+        // Also broadcast to project room (for anyone viewing the project)
+        socket.to(`project:${sanitizedData.projectId}`).emit('new-message', sanitizedData)
+        
+        console.log('📤 Message broadcast complete')
       })
 
       // 3) Mark message as read - validate authorization

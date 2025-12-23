@@ -73,6 +73,7 @@ interface AppState {
   getBid: (id: string) => Bid | undefined
   getBidsByProject: (projectId: string) => Bid[]
   getBidsBySubcontractor: (subcontractorId: string) => Bid[]
+  loadBids: (projectId?: string) => Promise<Bid[]>
 
   // Invitation actions
   inviteSubcontractors: (projectId: string, subcontractorIds: string[]) => Promise<Invitation[]>
@@ -286,7 +287,20 @@ export const useStore = create<AppState>((set, get) => ({
   // Data loading actions
   loadUsers: async () => {
     try {
-      const response = await fetch('/api/users')
+      // For contractors without company, only load subcontractors
+      // For subcontractors without company, only load contractors
+      const currentUser = get().currentUser
+      let endpoint = '/api/users'
+      
+      if (currentUser && !currentUser.companyId) {
+        if (currentUser.role === 'CONTRACTOR') {
+          endpoint = '/api/users?role=SUBCONTRACTOR'
+        } else if (currentUser.role === 'SUBCONTRACTOR') {
+          endpoint = '/api/users?role=CONTRACTOR'
+        }
+      }
+        
+      const response = await fetch(endpoint)
       const data = await response.json()
       
       if (!response.ok) {
@@ -617,6 +631,38 @@ export const useStore = create<AppState>((set, get) => ({
     return get().bids.filter((b) => b.subcontractorId === subcontractorId)
   },
 
+  loadBids: async (projectId?: string) => {
+    try {
+      const url = projectId ? `/api/bids?projectId=${projectId}` : '/api/bids'
+      const response = await fetch(url)
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load bids')
+      }
+
+      const bids = data.bids.map((bid: any) => ({
+        ...bid,
+        totalAmount: parseFloat(bid.totalAmount),
+        submittedAt: bid.submittedAt ? new Date(bid.submittedAt) : undefined,
+        createdAt: new Date(bid.createdAt),
+        updatedAt: new Date(bid.updatedAt),
+      }))
+
+      // Update local state with loaded bids
+      set((state) => ({
+        bids: projectId 
+          ? [...state.bids.filter(b => b.projectId !== projectId), ...bids]
+          : bids
+      }))
+
+      return bids
+    } catch (error) {
+      console.error('Failed to load bids:', error)
+      return []
+    }
+  },
+
   // Invitation actions
   inviteSubcontractors: async (projectId, subcontractorIds) => {
     try {
@@ -769,21 +815,26 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   getMessagesByUser: async (userId: string) => {
-    const response = await fetch(`/api/messages?userId=${userId}`)
-    const result = await response.json()
+    try {
+      const response = await fetch(`/api/messages?userId=${userId}`)
+      const result = await response.json()
 
-    if (!response.ok) {
-      throw new Error(result.error || 'Failed to fetch messages')
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to fetch messages')
+      }
+
+      const messages = result.messages.map((msg: any) => ({
+        ...msg,
+        sentAt: new Date(msg.sentAt),
+      }))
+
+      // Update local state
+      set({ messages })
+      return messages
+    } catch (error) {
+      console.error('Failed to fetch messages:', error)
+      throw error
     }
-
-    const messages = result.messages.map((msg: any) => ({
-      ...msg,
-      sentAt: new Date(msg.sentAt),
-    }))
-
-    // Update local state
-    set({ messages })
-    return messages
   },
 
   getMessagesByProject: async (projectId: string) => {
@@ -804,19 +855,31 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   markMessageAsRead: async (id: string) => {
-    const response = await fetch(`/api/messages/${id}/read`, {
-      method: 'PATCH',
-    })
+    try {
+      const response = await fetch(`/api/messages/${id}/read`, {
+        method: 'PATCH',
+      })
 
-    if (!response.ok) {
-      const result = await response.json()
-      throw new Error(result.error || 'Failed to mark message as read')
+      if (!response.ok) {
+        const result = await response.json()
+        
+        // If it's a 403 error, it means the user is not authorized to mark this message as read
+        // This could happen if they're trying to mark a message they sent (not received)
+        if (response.status === 403) {
+          return // Don't throw error, just skip
+        }
+        
+        throw new Error(result.error || 'Failed to mark message as read')
+      }
+
+      // Update local state only if API call succeeded
+      set((state) => ({
+        messages: state.messages.map((m) => (m.id === id ? { ...m, read: true } : m)),
+      }))
+    } catch (error) {
+      console.error(`Error marking message ${id} as read:`, error)
+      throw error
     }
-
-    // Update local state
-    set((state) => ({
-      messages: state.messages.map((m) => (m.id === id ? { ...m, read: true } : m)),
-    }))
   },
 
   addMessage: (message: Message) => {
@@ -826,6 +889,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (messageExists) {
         return state // Don't add duplicate
       }
+      
       return { messages: [...state.messages, message] }
     })
   },

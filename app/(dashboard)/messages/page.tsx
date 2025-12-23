@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useStore } from "@/lib/store"
 import { useSocket } from "@/lib/hooks/useSocket"
+import { useToast } from "@/hooks/use-toast"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,8 +13,9 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { Send, MessageSquare, Search, Clock, CheckCheck } from "lucide-react"
-import { Message, Project, User } from "@/lib/types"
+import { MessageFileUpload, AttachmentDisplay } from "@/components/message-file-upload"
+import { Send, MessageSquare, Search, Clock, CheckCheck, ArrowLeft } from "lucide-react"
+import { Message, Project, User, MessageAttachment } from "@/lib/types"
 import { formatDistanceToNow } from "date-fns"
 
 interface Conversation {
@@ -46,21 +48,24 @@ export default function MessagesPage() {
     markAsRead
   } = useSocket()
   
+  const { toast } = useToast()
+  
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null)
   const [newMessage, setNewMessage] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [showConversationsList, setShowConversationsList] = useState(true)
   
   // Load messages and related data on component mount
   useEffect(() => {
     const loadData = async () => {
       if (currentUser) {
         try {
-          await Promise.all([
-            getMessagesByUser(currentUser.id),
-            loadUsers(),
-            loadProjects()
-          ])
+          await getMessagesByUser(currentUser.id)
+          await loadUsers()
+          await loadProjects()
         } catch (error) {
           console.error('Failed to load messages:', error)
         } finally {
@@ -85,12 +90,16 @@ export default function MessagesPage() {
     
     userMessages.forEach(message => {
       const project = projects.find(p => p.id === message.projectId)
-      if (!project) return
+      if (!project) {
+        return
+      }
       
       // Determine the other user in the conversation
       const otherUserId = message.senderId === currentUser.id ? message.receiverId : message.senderId
       const otherUser = users.find(u => u.id === otherUserId)
-      if (!otherUser) return
+      if (!otherUser) {
+        return
+      }
       
       const key = `${message.projectId}::${otherUserId}`
       
@@ -129,12 +138,14 @@ export default function MessagesPage() {
     })
     
     // Convert to array and sort by last message time
-    return Array.from(conversationMap.values())
+    const result = Array.from(conversationMap.values())
       .sort((a, b) => {
         const aTime = a.lastMessage ? new Date(a.lastMessage.sentAt).getTime() : 0
         const bTime = b.lastMessage ? new Date(b.lastMessage.sentAt).getTime() : 0
         return bTime - aTime
       })
+    
+    return result
   }, [messages, projects, users, currentUser])
 
   // Handle URL parameters for pre-selecting conversations
@@ -210,16 +221,29 @@ export default function MessagesPage() {
   // Mark messages as read when conversation is selected
   useEffect(() => {
     if (selectedConv && currentUser) {
-      selectedConv.messages
-        .filter(msg => msg.receiverId === currentUser.id && !msg.read)
-        .forEach(async (msg) => {
+      const messagesToMarkAsRead = selectedConv.messages
+        .filter(msg => {
+          const isReceiver = msg.receiverId === currentUser.id
+          const isUnread = !msg.read
+          return isReceiver && isUnread
+        })
+      
+      // Mark messages as read sequentially to avoid race conditions
+      const markMessagesSequentially = async () => {
+        for (const msg of messagesToMarkAsRead) {
           try {
             await markMessageAsRead(msg.id)
             markAsRead(msg.id, msg.senderId)
           } catch (error) {
-            console.error('Failed to mark message as read:', error)
+            console.error(`Failed to mark message ${msg.id} as read:`, error)
+            // Continue with other messages even if one fails
           }
-        })
+        }
+      }
+      
+      if (messagesToMarkAsRead.length > 0) {
+        markMessagesSequentially()
+      }
     }
   }, [selectedConv, currentUser, markMessageAsRead, markAsRead])
 
@@ -232,27 +256,122 @@ export default function MessagesPage() {
   
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedConv || !currentUser) return
+    if ((!newMessage.trim() && selectedFiles.length === 0) || !selectedConv || !currentUser) return
     
     try {
+      setUploading(true)
+      let attachments: any[] = []
+      
+      // Upload files if any are selected
+      if (selectedFiles.length > 0) {
+        const formData = new FormData()
+        selectedFiles.forEach(file => {
+          formData.append('files', file)
+        })
+        
+        const uploadResponse = await fetch('/api/messages/upload', {
+          method: 'POST',
+          body: formData,
+        })
+        
+        if (!uploadResponse.ok) {
+          const error = await uploadResponse.json()
+          throw new Error(error.error || 'Failed to upload files')
+        }
+        
+        const uploadResult = await uploadResponse.json()
+        attachments = uploadResult.files
+      }
+      
       const messageData = {
         projectId: selectedConv.projectId,
         receiverId: selectedConv.otherUser.id,
-        text: newMessage.trim()
+        text: newMessage.trim(),
+        attachments
       }
       
-      // Send via API and Socket.IO
+      // Send via API first (for persistence), then via Socket.IO (for real-time)
       const sentMessage = await sendMessage(messageData)
-      socketSendMessage(sentMessage)
+      
+      // Send via socket for real-time delivery
+      const socketMessage = {
+        ...sentMessage,
+        attachments: attachments || []
+      }
+      socketSendMessage(socketMessage)
+      
+      // Refresh messages to ensure conversation appears
+      await getMessagesByUser(currentUser.id)
       
       setNewMessage("")
+      setSelectedFiles([])
+      
+      toast({
+        title: "Message sent!",
+        description: attachments.length > 0 
+          ? `Message sent with ${attachments.length} attachment(s)`
+          : "Message sent successfully",
+      })
+      
     } catch (error) {
       console.error('Failed to send message:', error)
+      toast({
+        title: "Failed to send message",
+        description: error instanceof Error ? error.message : "Please try again",
+        variant: "destructive",
+      })
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleFileSelect = (files: File[]) => {
+    setSelectedFiles(prev => [...prev, ...files])
+  }
+
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Handle conversation selection for mobile
+  const handleConversationSelect = (conversationKey: string) => {
+    setSelectedConversation(conversationKey)
+    setShowConversationsList(false) // Hide conversations list on mobile when chat is selected
+  }
+
+  // Handle back to conversations on mobile
+  const handleBackToConversations = () => {
+    setSelectedConversation(null)
+    setShowConversationsList(true)
+  }
+
+  const handleDownloadAttachment = async (attachment: MessageAttachment) => {
+    try {
+      const response = await fetch(attachment.url)
+      const blob = await response.blob()
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = attachment.originalName
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      
+    } catch (error) {
+      console.error('Failed to download file:', error)
+      toast({
+        title: "Download failed",
+        description: "Failed to download the file. Please try again.",
+        variant: "destructive",
+      })
     }
   }
   
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && selectedFiles.length === 0) {
       e.preventDefault()
       handleSendMessage()
     }
@@ -287,8 +406,8 @@ export default function MessagesPage() {
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
-        {/* Conversations List */}
-        <Card className="lg:col-span-1">
+        {/* Conversations List - Show/hide based on mobile state */}
+        <Card className={`lg:col-span-1 ${!showConversationsList ? 'hidden lg:block' : ''}`}>
           <CardHeader className="pb-4">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg">Conversations</CardTitle>
@@ -331,7 +450,7 @@ export default function MessagesPage() {
                         className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${
                           isSelected ? 'bg-muted border-r-2 border-primary' : ''
                         }`}
-                        onClick={() => setSelectedConversation(`${conversation.projectId}::${conversation.otherUser.id}`)}
+                        onClick={() => handleConversationSelect(`${conversation.projectId}::${conversation.otherUser.id}`)}
                       >
                         <div className="flex items-start gap-3">
                           <Avatar className="h-10 w-10">
@@ -384,13 +503,22 @@ export default function MessagesPage() {
           </CardContent>
         </Card>
         
-        {/* Chat Area */}
-        <Card className="lg:col-span-2">
+        {/* Chat Area - Show/hide based on mobile state */}
+        <Card className={`lg:col-span-2 ${showConversationsList ? 'hidden lg:block' : ''}`}>
           {selectedConv ? (
             <>
-              {/* Chat Header */}
+              {/* Chat Header with Back Button for Mobile */}
               <CardHeader className="pb-4">
                 <div className="flex items-center gap-3">
+                  {/* Back button for mobile */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="lg:hidden"
+                    onClick={handleBackToConversations}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
                   <Avatar className="h-10 w-10">
                     <AvatarFallback>
                       {selectedConv.otherUser.name.split(' ').map(n => n[0]).join('').toUpperCase()}
@@ -431,7 +559,13 @@ export default function MessagesPage() {
                                   : 'bg-muted text-foreground'
                               }`}
                             >
-                              <p className="text-sm">{message.text}</p>
+                              {message.text && <p className="text-sm">{message.text}</p>}
+                              
+                              {/* Display attachments */}
+                              <AttachmentDisplay 
+                                attachments={message.attachments || []}
+                                onDownload={handleDownloadAttachment}
+                              />
                             </div>
                             <div className={`flex items-center gap-1 mt-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
                               <Clock className="h-3 w-3 text-muted-foreground" />
@@ -450,7 +584,16 @@ export default function MessagesPage() {
                 </ScrollArea>
                 
                 {/* Message Input */}
-                <div className="p-4 border-t">
+                <div className="p-4 border-t space-y-3">
+                  {/* File Upload */}
+                  <MessageFileUpload
+                    onFileSelect={handleFileSelect}
+                    selectedFiles={selectedFiles}
+                    onRemoveFile={handleRemoveFile}
+                    disabled={uploading}
+                  />
+                  
+                  {/* Text Input */}
                   <div className="flex gap-2">
                     <Input
                       placeholder="Type your message..."
@@ -458,13 +601,15 @@ export default function MessagesPage() {
                       onChange={(e) => setNewMessage(e.target.value)}
                       onKeyDown={handleKeyPress}
                       className="flex-1"
+                      disabled={uploading}
                     />
                     <Button 
                       onClick={handleSendMessage}
-                      disabled={!newMessage.trim()}
+                      disabled={(!newMessage.trim() && selectedFiles.length === 0) || uploading}
                       size="sm"
                     >
                       <Send className="h-4 w-4" />
+                      {uploading && <span className="ml-2">Sending...</span>}
                     </Button>
                   </div>
                 </div>

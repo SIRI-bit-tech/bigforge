@@ -38,10 +38,11 @@ export function Navbar() {
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link href={isAuthenticated ? "/dashboard" : "/"} className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded bg-primary text-white font-bold text-lg">
-              BF
-            </div>
-            <span className="text-xl font-bold text-foreground">BidForge</span>
+            <img 
+              src="/bidforge-logo-horizontal.svg" 
+              alt="BidForge" 
+              className="h-8 w-auto"
+            />
           </Link>
 
           {/* Desktop Navigation */}

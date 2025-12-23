@@ -14,17 +14,24 @@ export default function MyBidsPage() {
   const router = useRouter()
   const { 
     currentUser, 
-    getBidsBySubcontractor, 
     projects, 
-    loadProjects 
+    loadProjects,
+    loadBids
   } = useStore()
   
   const [loading, setLoading] = useState(true)
+  const [myBids, setMyBids] = useState<any[]>([])
 
   useEffect(() => {
     const loadData = async () => {
       try {
         await loadProjects()
+        
+        // Load user's bids
+        if (currentUser && currentUser.role === 'SUBCONTRACTOR') {
+          const bids = await loadBids() // Load all bids for this user
+          setMyBids(bids)
+        }
       } catch (error) {
         console.error('Failed to load data:', error)
       } finally {
@@ -33,7 +40,7 @@ export default function MyBidsPage() {
     }
     
     loadData()
-  }, [loadProjects])
+  }, [loadProjects, loadBids, currentUser])
 
   if (!currentUser || currentUser.role !== 'SUBCONTRACTOR') {
     return (
@@ -44,8 +51,6 @@ export default function MyBidsPage() {
       />
     )
   }
-
-  const myBids = getBidsBySubcontractor(currentUser.id)
 
   if (loading) {
     return (

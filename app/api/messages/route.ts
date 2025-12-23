@@ -124,12 +124,12 @@ export async function POST(request: NextRequest) {
     // Use authenticated user's ID as sender (ignore senderId from request body)
     const authenticatedUserId = payload.userId
 
-    const { projectId, receiverId, text, bidId } = await request.json()
+    const { projectId, receiverId, text, bidId, attachments } = await request.json()
 
     // Validate input (removed senderId validation since we use authenticated user)
-    if (!projectId || !receiverId || !text) {
+    if (!projectId || !receiverId || (!text && (!attachments || attachments.length === 0))) {
       return NextResponse.json(
-        { error: 'Project ID, receiver ID, and text are required' },
+        { error: 'Project ID, receiver ID, and either text or attachments are required' },
         { status: 400 }
       )
     }
@@ -209,7 +209,7 @@ export async function POST(request: NextRequest) {
         projectId,
         senderId: authenticatedUserId, // Use authenticated user's ID
         receiverId,
-        text: text.trim(),
+        text: text?.trim() || '',
         bidId: bidId || null,
         read: false,
         sentAt: new Date(),
@@ -221,13 +221,15 @@ export async function POST(request: NextRequest) {
       projectId,
       senderId: authenticatedUserId.replace(/(.{2}).*/, '$1***'),
       receiverId: receiverId.replace(/(.{2}).*/, '$1***'),
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      hasAttachments: !!(attachments && attachments.length > 0)
     })
 
     // Format the message for JSON response
     const formattedMessage = {
       ...newMessage,
-      sentAt: newMessage.sentAt.toISOString()
+      sentAt: newMessage.sentAt.toISOString(),
+      attachments: attachments || []
     }
 
     return NextResponse.json({ message: formattedMessage }, { status: 201 })

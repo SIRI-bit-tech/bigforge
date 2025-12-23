@@ -53,19 +53,59 @@ export async function GET(request: NextRequest) {
     if (payload.role === 'ADMIN') {
       // ADMIN role can query all users - no additional filtering needed
       console.log(`Admin ${payload.userId} accessing all users`)
-    } else {
-      // Non-admin users: restrict results to users.companyId === token.companyId
-      if (!payload.companyId) {
-        console.warn(`User ${payload.userId} attempted to access users without companyId`)
-        return NextResponse.json(
-          { error: 'Access denied. No company association found.' },
-          { status: 403 }
-        )
+    } else if (payload.role === 'CONTRACTOR') {
+      // CONTRACTORS can view:
+      // - All SUBCONTRACTORS (for inviting to projects)
+      // - Users from their own company (if they have one)
+      if (role === 'SUBCONTRACTOR') {
+        // Allow contractors to see all subcontractors for project invitations
+        console.log(`Contractor ${payload.userId} accessing all subcontractors`)
+      } else if (payload.companyId) {
+        // If querying other roles, restrict to same company
+        mainWhereConditions.push(eq(users.companyId, payload.companyId))
+        console.log(`Contractor ${payload.userId} accessing company ${payload.companyId} users`)
+      } else {
+        // Contractor without company can only see subcontractors
+        if (!role || role !== 'SUBCONTRACTOR') {
+          console.warn(`Contractor ${payload.userId} without company attempted to access non-subcontractor users`)
+          return NextResponse.json(
+            { error: 'Access denied. Contractors can view subcontractors or users from their company.' },
+            { status: 403 }
+          )
+        }
       }
-
-      // Filter to only users in the same company
-      mainWhereConditions.push(eq(users.companyId, payload.companyId))
-      console.log(`User ${payload.userId} accessing company ${payload.companyId} users`)
+    } else if (payload.role === 'SUBCONTRACTOR') {
+      // SUBCONTRACTORS can view:
+      // - Users from their own company (if they have one)
+      // - Other subcontractors (for networking)
+      // - Contractors (for messaging)
+      if (role === 'SUBCONTRACTOR') {
+        // Allow subcontractors to see other subcontractors
+        console.log(`Subcontractor ${payload.userId} accessing all subcontractors`)
+      } else if (role === 'CONTRACTOR') {
+        // Allow subcontractors to see contractors for messaging
+        console.log(`Subcontractor ${payload.userId} accessing all contractors`)
+      } else if (payload.companyId) {
+        // If querying other roles, restrict to same company
+        mainWhereConditions.push(eq(users.companyId, payload.companyId))
+        console.log(`Subcontractor ${payload.userId} accessing company ${payload.companyId} users`)
+      } else {
+        // Subcontractor without company can see subcontractors and contractors
+        if (!role || !['SUBCONTRACTOR', 'CONTRACTOR'].includes(role)) {
+          console.warn(`Subcontractor ${payload.userId} without company attempted to access non-subcontractor/contractor users`)
+          return NextResponse.json(
+            { error: 'Access denied. Subcontractors can view other subcontractors, contractors, or users from their company.' },
+            { status: 403 }
+          )
+        }
+      }
+    } else {
+      // Unknown role
+      console.warn(`User ${payload.userId} with unknown role ${payload.role} attempted to access users`)
+      return NextResponse.json(
+        { error: 'Access denied. Invalid user role.' },
+        { status: 403 }
+      )
     }
 
     // 4) Apply role filter if specified (keeping existing functionality)
@@ -86,8 +126,22 @@ export async function GET(request: NextRequest) {
     // Apply the same filters as the main query
     const countWhereConditions = []
     
-    if (payload.role !== 'ADMIN') {
-      countWhereConditions.push(eq(users.companyId, payload.companyId!))
+    if (payload.role === 'ADMIN') {
+      // Admin can count all users
+    } else if (payload.role === 'CONTRACTOR') {
+      if (role === 'SUBCONTRACTOR') {
+        // Contractors can count all subcontractors
+      } else if (payload.companyId) {
+        countWhereConditions.push(eq(users.companyId, payload.companyId))
+      }
+    } else if (payload.role === 'SUBCONTRACTOR') {
+      if (role === 'SUBCONTRACTOR') {
+        // Subcontractors can count all subcontractors
+      } else if (role === 'CONTRACTOR') {
+        // Subcontractors can count all contractors
+      } else if (payload.companyId) {
+        countWhereConditions.push(eq(users.companyId, payload.companyId))
+      }
     }
 
     if (role && ['CONTRACTOR', 'SUBCONTRACTOR'].includes(role)) {

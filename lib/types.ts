@@ -143,6 +143,18 @@ export interface Message {
   text: string
   sentAt: Date
   read: boolean
+  attachments?: MessageAttachment[]
+}
+
+export interface MessageAttachment {
+  id: string
+  messageId: string
+  fileName: string
+  originalName: string
+  fileType: string
+  fileSize: number
+  url: string
+  uploadedAt: Date
 }
 
 export interface Certification {

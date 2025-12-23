@@ -43,7 +43,7 @@ export function BidCard({ bid, company, project, showProject = false, showAction
       <div className="mb-4">
         <div className="text-2xl font-bold text-foreground">{formatCurrency(bid.totalAmount)}</div>
         <div className="text-sm text-muted-foreground">
-          {bid.lineItems.length} line items • {bid.alternates.length} alternates
+          {bid.lineItems?.length || 0} line items • {bid.alternates?.length || 0} alternates
         </div>
       </div>
 

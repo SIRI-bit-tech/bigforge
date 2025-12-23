@@ -12,7 +12,6 @@ export async function PATCH(
     const token = request.cookies.get('auth-token')?.value
 
     if (!token) {
-      console.warn('Message read attempt without authentication token')
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -21,7 +20,6 @@ export async function PATCH(
 
     const payload = verifyJWT(token)
     if (!payload) {
-      console.warn('Message read attempt with invalid token')
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }
@@ -52,11 +50,15 @@ export async function PATCH(
 
     // Authorization check - verify session user id matches message recipient
     if (message.receiverId !== payload.userId) {
-      console.warn(`User ${payload.userId} attempted to mark message ${id} as read (recipient: ${message.receiverId})`)
       return NextResponse.json(
         { error: 'Access denied. You can only mark your own messages as read.' },
         { status: 403 }
       )
+    }
+
+    // Check if message is already read
+    if (message.read) {
+      return NextResponse.json({ message })
     }
 
     // Only perform update after authentication and authorization checks pass
@@ -69,8 +71,6 @@ export async function PATCH(
     if (!updatedMessage) {
       return NextResponse.json({ error: 'Message not found' }, { status: 404 })
     }
-
-    console.log(`User ${payload.userId} marked message ${id} as read`)
 
     return NextResponse.json({ message: updatedMessage })
   } catch (error) {

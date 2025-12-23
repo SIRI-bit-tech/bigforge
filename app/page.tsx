@@ -210,10 +210,11 @@ export default function HomePage() {
           <div className="grid gap-8 md:grid-cols-4">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <div className="flex h-8 w-8 items-center justify-center rounded bg-primary text-white font-bold text-lg">
-                  BF
-                </div>
-                <span className="text-lg font-bold">BidForge</span>
+                <img 
+                  src="/bidforge-logo-horizontal.svg" 
+                  alt="BidForge" 
+                  className="h-6 w-auto"
+                />
               </div>
               <p className="text-sm text-muted-foreground">The complete platform for construction bid management</p>
             </div>

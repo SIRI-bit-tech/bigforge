@@ -1,12 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, projects, projectTrades, trades } from '@/lib/db'
 import { eq } from 'drizzle-orm'
+import { verifyJWT } from '@/lib/services/auth'
 
 export async function GET(request: NextRequest) {
   try {
+    // Authentication check
+    const token = request.cookies.get('auth-token')?.value
+
+    if (!token) {
+      console.warn('Projects fetch attempt without authentication token')
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const payload = verifyJWT(token)
+    if (!payload) {
+      console.warn('Projects fetch attempt with invalid token')
+      return NextResponse.json(
+        { error: 'Invalid or expired token' },
+        { status: 401 }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
-    const createdBy = searchParams.get('createdBy')
+    // Note: createdBy query parameter is ignored for security - users can only see projects they have access to
 
     // Get projects with their trades
     const projectsWithTrades = await db
@@ -32,13 +53,29 @@ export async function GET(request: NextRequest) {
       .leftJoin(projectTrades, eq(projects.id, projectTrades.projectId))
       .leftJoin(trades, eq(projectTrades.tradeId, trades.id))
 
-    // Apply filters
+    // Apply authorization-based filtering
     let filteredProjects = projectsWithTrades
+
+    // Users can see:
+    // 1. Projects they created (if they're contractors)
+    // 2. Published projects (if they're subcontractors looking for opportunities)
+    if (payload.role === 'CONTRACTOR') {
+      // Contractors can see their own projects (all statuses)
+      filteredProjects = filteredProjects.filter(p => p.createdById === payload.userId)
+    } else if (payload.role === 'SUBCONTRACTOR') {
+      // Subcontractors can only see published projects (opportunities)
+      filteredProjects = filteredProjects.filter(p => p.status === 'PUBLISHED')
+    } else {
+      // Unknown role - deny access
+      return NextResponse.json(
+        { error: 'Access denied. Invalid user role.' },
+        { status: 403 }
+      )
+    }
+
+    // Apply additional status filter if specified
     if (status && ['DRAFT', 'PUBLISHED', 'CLOSED', 'AWARDED'].includes(status)) {
       filteredProjects = filteredProjects.filter(p => p.status === status)
-    }
-    if (createdBy) {
-      filteredProjects = filteredProjects.filter(p => p.createdById === createdBy)
     }
 
     // Group trades by project
@@ -77,6 +114,8 @@ export async function GET(request: NextRequest) {
 
     const result = Array.from(projectsMap.values())
 
+    console.log(`User ${payload.userId} (${payload.role}) fetched ${result.length} projects`)
+
     return NextResponse.json({
       success: true,
       projects: result
@@ -93,16 +132,49 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { title, description, location, budgetMin, budgetMax, startDate, endDate, deadline, createdById, status } = body
+    // Authentication check
+    const token = request.cookies.get('auth-token')?.value
 
-    // Validate required fields
-    if (!title || !description || !location || !deadline || !createdById) {
+    if (!token) {
+      console.warn('Project creation attempt without authentication token')
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const payload = verifyJWT(token)
+    if (!payload) {
+      console.warn('Project creation attempt with invalid token')
+      return NextResponse.json(
+        { error: 'Invalid or expired token' },
+        { status: 401 }
+      )
+    }
+
+    // Only contractors can create projects
+    if (payload.role !== 'CONTRACTOR') {
+      console.warn(`User ${payload.userId} with role ${payload.role} attempted to create project`)
+      return NextResponse.json(
+        { error: 'Access denied. Only contractors can create projects.' },
+        { status: 403 }
+      )
+    }
+
+    const body = await request.json()
+    const { title, description, location, budgetMin, budgetMax, startDate, endDate, deadline, status } = body
+    // Note: createdById is ignored from request body - we use authenticated user's ID
+
+    // Validate required fields (removed createdById since we derive it from auth)
+    if (!title || !description || !location || !deadline) {
+      return NextResponse.json(
+        { error: 'Missing required fields: title, description, location, deadline' },
         { status: 400 }
       )
     }
+
+    // Use authenticated user's ID as createdById
+    const authenticatedUserId = payload.userId
 
     const [project] = await db
       .insert(projects)
@@ -115,10 +187,12 @@ export async function POST(request: NextRequest) {
         startDate: startDate ? new Date(startDate) : null,
         endDate: endDate ? new Date(endDate) : null,
         deadline: new Date(deadline),
-        createdById,
+        createdById: authenticatedUserId, // Use authenticated user's ID
         status: status || 'DRAFT',
       })
       .returning()
+
+    console.log(`User ${authenticatedUserId} created project ${project.id}: "${project.title}"`)
 
     return NextResponse.json({
       success: true,

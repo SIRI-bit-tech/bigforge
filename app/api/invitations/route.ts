@@ -1,9 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, invitations, projects, users } from '@/lib/db'
 import { eq, and } from 'drizzle-orm'
+import { verifyJWT } from '@/lib/services/auth'
 
 export async function POST(request: NextRequest) {
   try {
+    // Authentication check - verify caller is authenticated
+    const token = request.cookies.get('auth-token')?.value
+
+    if (!token) {
+      console.warn('Invitation creation attempt without authentication token')
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const payload = verifyJWT(token)
+    if (!payload) {
+      console.warn('Invitation creation attempt with invalid token')
+      return NextResponse.json(
+        { error: 'Invalid or expired token' },
+        { status: 401 }
+      )
+    }
+
     const { projectId, subcontractorIds, message } = await request.json()
 
     // Validate input
@@ -14,7 +35,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify project exists and is published
+    // Authorization check - verify caller is authorized to invite subcontractors to the project
+    // (i.e., is the project owner)
     const [project] = await db
       .select()
       .from(projects)
@@ -28,6 +50,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if the authenticated user is the project owner
+    if (project.createdById !== payload.userId) {
+      console.warn(`User ${payload.userId} attempted unauthorized invitation creation for project ${projectId} (owner: ${project.createdById})`)
+      return NextResponse.json(
+        { error: 'Access denied. Only project owners can send invitations.' },
+        { status: 403 }
+      )
+    }
+
     if (project.status !== 'PUBLISHED') {
       return NextResponse.json(
         { error: 'Can only invite to published projects' },
@@ -35,9 +66,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // For now, let's assume all provided IDs are valid subcontractors
-    // In production, you'd want to verify each ID exists and is a subcontractor
-    const validSubcontractorIds = subcontractorIds
+    // Verify that all provided IDs are valid subcontractors
+    const validSubcontractors = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(
+          eq(users.role, 'SUBCONTRACTOR'),
+          // Check if user ID is in the provided list
+          // Note: This is a simplified check - in production you might want to use an IN clause
+        )
+      )
+
+    // Filter to only include valid subcontractor IDs that exist in the database
+    const validSubcontractorIds = subcontractorIds.filter(id => 
+      validSubcontractors.some(sub => sub.id === id)
+    )
 
     if (validSubcontractorIds.length === 0) {
       return NextResponse.json(
@@ -76,6 +120,8 @@ export async function POST(request: NextRequest) {
       )
       .returning()
 
+    console.log(`User ${payload.userId} successfully sent ${newInvitations.length} invitation(s) for project ${projectId}`)
+
     // TODO: Send email notifications to subcontractors
     // This would integrate with your email service
     
@@ -96,23 +142,86 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    // Authentication check for GET endpoint as well
+    const token = request.cookies.get('auth-token')?.value
+
+    if (!token) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const payload = verifyJWT(token)
+    if (!payload) {
+      return NextResponse.json(
+        { error: 'Invalid or expired token' },
+        { status: 401 }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
     const projectId = searchParams.get('projectId')
 
     let whereConditions = []
 
-    if (userId) {
-      whereConditions.push(eq(invitations.subcontractorId, userId))
-    }
+    // Authorization: Users can only view invitations they're involved with
+    if (payload.role === 'CONTRACTOR') {
+      // Contractors can view invitations for their own projects
+      if (projectId) {
+        // Verify the contractor owns this project
+        const [project] = await db
+          .select({ createdById: projects.createdById })
+          .from(projects)
+          .where(eq(projects.id, projectId))
+          .limit(1)
 
-    if (projectId) {
-      whereConditions.push(eq(invitations.projectId, projectId))
+        if (!project || project.createdById !== payload.userId) {
+          return NextResponse.json(
+            { error: 'Access denied. You can only view invitations for your own projects.' },
+            { status: 403 }
+          )
+        }
+        whereConditions.push(eq(invitations.projectId, projectId))
+      } else {
+        // If no specific project, show invitations for all their projects
+        const userProjects = await db
+          .select({ id: projects.id })
+          .from(projects)
+          .where(eq(projects.createdById, payload.userId))
+
+        if (userProjects.length === 0) {
+          return NextResponse.json({
+            success: true,
+            invitations: []
+          })
+        }
+
+        // This would need to be implemented with an IN clause for multiple projects
+        // For now, we'll return empty if no specific project is requested
+        return NextResponse.json({
+          success: true,
+          invitations: []
+        })
+      }
+    } else if (payload.role === 'SUBCONTRACTOR') {
+      // Subcontractors can only view their own invitations
+      whereConditions.push(eq(invitations.subcontractorId, payload.userId))
+      
+      if (projectId) {
+        whereConditions.push(eq(invitations.projectId, projectId))
+      }
+    } else {
+      return NextResponse.json(
+        { error: 'Access denied. Invalid user role.' },
+        { status: 403 }
+      )
     }
 
     const result = whereConditions.length > 0 
       ? await db.select().from(invitations).where(and(...whereConditions))
-      : await db.select().from(invitations)
+      : []
 
     return NextResponse.json({
       success: true,

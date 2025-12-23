@@ -1,17 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, messages, users, projects } from '@/lib/db'
+import { db, messages, users, projects, bids } from '@/lib/db'
 import { eq, and, or, desc } from 'drizzle-orm'
+import { verifyJWT } from '@/lib/services/auth'
 
-// Get messages for a user
+// Get messages for authenticated user
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
-    const projectId = searchParams.get('projectId')
+    // Extract authenticated user's ID from auth token
+    const token = request.cookies.get('auth-token')?.value
 
-    if (!userId) {
-      return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
+    if (!token) {
+      console.warn('Messages fetch attempt without authentication token')
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
     }
+
+    const payload = verifyJWT(token)
+    if (!payload) {
+      console.warn('Messages fetch attempt with invalid token')
+      return NextResponse.json(
+        { error: 'Invalid or expired token' },
+        { status: 401 }
+      )
+    }
+
+    // Use authenticated user's ID for authorization (ignore userId query param)
+    const authenticatedUserId = payload.userId
+    
+    const { searchParams } = new URL(request.url)
+    const projectId = searchParams.get('projectId')
+    
+    // Note: userId query parameter is ignored for security - we only use the authenticated user's ID
 
     let query = db
       .select({
@@ -27,22 +48,34 @@ export async function GET(request: NextRequest) {
       .from(messages)
       .where(
         or(
-          eq(messages.senderId, userId),
-          eq(messages.receiverId, userId)
+          eq(messages.senderId, authenticatedUserId),
+          eq(messages.receiverId, authenticatedUserId)
         )
       )
 
     // Filter by project if specified
     if (projectId) {
-      query = query.where(
-        and(
-          or(
-            eq(messages.senderId, userId),
-            eq(messages.receiverId, userId)
-          ),
-          eq(messages.projectId, projectId)
+      query = db
+        .select({
+          id: messages.id,
+          projectId: messages.projectId,
+          senderId: messages.senderId,
+          receiverId: messages.receiverId,
+          text: messages.text,
+          sentAt: messages.sentAt,
+          read: messages.read,
+          bidId: messages.bidId,
+        })
+        .from(messages)
+        .where(
+          and(
+            or(
+              eq(messages.senderId, authenticatedUserId),
+              eq(messages.receiverId, authenticatedUserId)
+            ),
+            eq(messages.projectId, projectId)
+          )
         )
-      )
     }
 
     const userMessages = await query.orderBy(desc(messages.sentAt))
@@ -52,6 +85,8 @@ export async function GET(request: NextRequest) {
       ...msg,
       sentAt: msg.sentAt.toISOString()
     }))
+
+    console.log(`User ${authenticatedUserId} fetched ${formattedMessages.length} messages${projectId ? ` for project ${projectId}` : ''}`)
 
     return NextResponse.json({ messages: formattedMessages })
   } catch (error) {
@@ -66,12 +101,35 @@ export async function GET(request: NextRequest) {
 // Send a new message
 export async function POST(request: NextRequest) {
   try {
-    const { projectId, receiverId, text, senderId, bidId } = await request.json()
+    // Extract authenticated user's ID from auth token
+    const token = request.cookies.get('auth-token')?.value
 
-    // Validate input
-    if (!projectId || !receiverId || !text || !senderId) {
+    if (!token) {
+      console.warn('Message send attempt without authentication token')
       return NextResponse.json(
-        { error: 'Project ID, receiver ID, text, and sender ID are required' },
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const payload = verifyJWT(token)
+    if (!payload) {
+      console.warn('Message send attempt with invalid token')
+      return NextResponse.json(
+        { error: 'Invalid or expired token' },
+        { status: 401 }
+      )
+    }
+
+    // Use authenticated user's ID as sender (ignore senderId from request body)
+    const authenticatedUserId = payload.userId
+
+    const { projectId, receiverId, text, bidId } = await request.json()
+
+    // Validate input (removed senderId validation since we use authenticated user)
+    if (!projectId || !receiverId || !text) {
+      return NextResponse.json(
+        { error: 'Project ID, receiver ID, and text are required' },
         { status: 400 }
       )
     }
@@ -90,32 +148,66 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify users exist
-    const [sender] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, senderId))
-      .limit(1)
+    // Check if the session user is allowed to send messages for the given project
+    // Users can send messages if they are:
+    // 1. The project owner (contractor), OR
+    // 2. A subcontractor who has submitted a bid to this project
+    const isProjectOwner = project.createdById === authenticatedUserId
 
+    let canSendMessage = isProjectOwner
+
+    if (!canSendMessage) {
+      // Check if user has submitted a bid to this project (indicating legitimate access)
+      const [userBid] = await db
+        .select({ id: bids.id })
+        .from(bids)
+        .where(
+          and(
+            eq(bids.projectId, projectId),
+            eq(bids.subcontractorId, authenticatedUserId)
+          )
+        )
+        .limit(1)
+
+      canSendMessage = !!userBid
+    }
+
+    if (!canSendMessage) {
+      console.warn(`User ${authenticatedUserId} attempted to send message for unauthorized project ${projectId}`)
+      return NextResponse.json(
+        { error: 'Access denied. You must be the project owner or have submitted a bid to send messages for this project.' },
+        { status: 403 }
+      )
+    }
+
+    // Verify receiver exists
     const [receiver] = await db
       .select()
       .from(users)
       .where(eq(users.id, receiverId))
       .limit(1)
 
-    if (!sender || !receiver) {
+    if (!receiver) {
       return NextResponse.json(
-        { error: 'Sender or receiver not found' },
+        { error: 'Receiver not found' },
         { status: 404 }
       )
     }
 
-    // Create message
+    // Prevent users from sending messages to themselves
+    if (authenticatedUserId === receiverId) {
+      return NextResponse.json(
+        { error: 'Cannot send message to yourself' },
+        { status: 400 }
+      )
+    }
+
+    // Create message using authenticated user as sender
     const [newMessage] = await db
       .insert(messages)
       .values({
         projectId,
-        senderId,
+        senderId: authenticatedUserId, // Use authenticated user's ID
         receiverId,
         text: text.trim(),
         bidId: bidId || null,
@@ -127,7 +219,7 @@ export async function POST(request: NextRequest) {
     console.info('Message sent:', {
       messageId: newMessage.id,
       projectId,
-      senderId: senderId.replace(/(.{2}).*/, '$1***'),
+      senderId: authenticatedUserId.replace(/(.{2}).*/, '$1***'),
       receiverId: receiverId.replace(/(.{2}).*/, '$1***'),
       timestamp: new Date().toISOString()
     })

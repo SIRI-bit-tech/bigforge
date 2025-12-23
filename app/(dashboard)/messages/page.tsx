@@ -92,7 +92,7 @@ export default function MessagesPage() {
       const otherUser = users.find(u => u.id === otherUserId)
       if (!otherUser) return
       
-      const key = `${message.projectId}-${otherUserId}`
+      const key = `${message.projectId}::${otherUserId}`
       
       if (!conversationMap.has(key)) {
         conversationMap.set(key, {
@@ -146,20 +146,20 @@ export default function MessagesPage() {
     
     if (projectId && userId) {
       // Auto-select conversation based on URL params
-      setSelectedConversation(`${projectId}-${userId}`)
+      setSelectedConversation(`${projectId}::${userId}`)
       // Clear URL params after selection
       router.replace('/messages', { scroll: false })
     } else if (userId && !projectId) {
       // If only user ID is provided, try to find any conversation with that user
       const conversation = conversations.find(conv => conv.otherUser.id === userId)
       if (conversation) {
-        setSelectedConversation(`${conversation.projectId}-${conversation.otherUser.id}`)
+        setSelectedConversation(`${conversation.projectId}::${conversation.otherUser.id}`)
       } else {
         // Create a new conversation context - we need a project for messaging
         // For now, let's use the most recent project the current user created
         const userProject = projects.find(p => p.createdBy === currentUser?.id || p.createdById === currentUser?.id)
         if (userProject) {
-          setSelectedConversation(`${userProject.id}-${userId}`)
+          setSelectedConversation(`${userProject.id}::${userId}`)
         }
       }
       router.replace('/messages', { scroll: false })
@@ -183,13 +183,13 @@ export default function MessagesPage() {
     
     // Try to find existing conversation
     const existing = conversations.find(conv => 
-      `${conv.projectId}-${conv.otherUser.id}` === selectedConversation
+      `${conv.projectId}::${conv.otherUser.id}` === selectedConversation
     )
     
     if (existing) return existing
     
     // Create virtual conversation for new chats
-    const [projectId, userId] = selectedConversation.split('-')
+    const [projectId, userId] = selectedConversation.split('::')
     const project = projects.find(p => p.id === projectId)
     const otherUser = users.find(u => u.id === userId)
     
@@ -323,15 +323,15 @@ export default function MessagesPage() {
               {filteredConversations.length > 0 ? (
                 <div className="space-y-1">
                   {filteredConversations.map((conversation) => {
-                    const isSelected = `${conversation.projectId}-${conversation.otherUser.id}` === selectedConversation
+                    const isSelected = `${conversation.projectId}::${conversation.otherUser.id}` === selectedConversation
                     
                     return (
                       <div
-                        key={`${conversation.projectId}-${conversation.otherUser.id}`}
+                        key={`${conversation.projectId}::${conversation.otherUser.id}`}
                         className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${
                           isSelected ? 'bg-muted border-r-2 border-primary' : ''
                         }`}
-                        onClick={() => setSelectedConversation(`${conversation.projectId}-${conversation.otherUser.id}`)}
+                        onClick={() => setSelectedConversation(`${conversation.projectId}::${conversation.otherUser.id}`)}
                       >
                         <div className="flex items-start gap-3">
                           <Avatar className="h-10 w-10">

@@ -1,7 +1,9 @@
 import { Server as HTTPServer } from 'http'
-import { Server as SocketIOServer } from 'socket.io'
-
+import { Server as SocketIOServer, Socket } from 'socket.io'
 import { NextApiResponse } from 'next'
+import { verifyJWT } from '@/lib/services/auth'
+import { db, projects, bids, messages } from '@/lib/db'
+import { eq, and } from 'drizzle-orm'
 
 export type SocketServer = NextApiResponse & {
   socket: {
@@ -11,10 +13,85 @@ export type SocketServer = NextApiResponse & {
   }
 }
 
+interface AuthenticatedSocket extends Socket {
+  userId?: string
+  role?: string
+  companyId?: string
+  violationCount?: number
+}
+
+// Helper function to authenticate socket connection
+const authenticateSocket = async (socket: Socket, token: string): Promise<boolean> => {
+  try {
+    const payload = verifyJWT(token)
+    if (!payload) {
+      return false
+    }
+
+    // Attach user info to socket for authorization checks
+    ;(socket as any).userId = payload.userId
+    ;(socket as any).role = payload.role
+    ;(socket as any).companyId = payload.companyId
+    ;(socket as any).violationCount = 0
+
+    return true
+  } catch (error) {
+    console.warn('Socket authentication failed:', error)
+    return false
+  }
+}
+
+// Helper function to check project membership/permission
+const checkProjectPermission = async (userId: string, projectId: string): Promise<boolean> => {
+  try {
+    // Check if user is project owner OR has submitted a bid
+    const [project] = await db
+      .select({ createdById: projects.createdById })
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1)
+
+    if (project?.createdById === userId) {
+      return true // Project owner
+    }
+
+    // Check if user has submitted a bid
+    const [bid] = await db
+      .select({ id: bids.id })
+      .from(bids)
+      .where(
+        and(
+          eq(bids.projectId, projectId),
+          eq(bids.subcontractorId, userId)
+        )
+      )
+      .limit(1)
+
+    return !!bid // Has submitted a bid
+  } catch (error) {
+    console.error('Error checking project permission:', error)
+    return false
+  }
+}
+
+// Helper function to handle violations and potentially disconnect malicious clients
+const handleViolation = (socket: Socket, reason: string) => {
+  const socketAny = socket as any
+  socketAny.violationCount = (socketAny.violationCount || 0) + 1
+  console.warn(`Socket violation for user ${socketAny.userId}: ${reason} (count: ${socketAny.violationCount})`)
+  
+  // Disconnect after 3 violations
+  if (socketAny.violationCount >= 3) {
+    console.error(`Disconnecting user ${socketAny.userId} for repeated violations`)
+    socket.emit('error', { message: 'Connection terminated due to repeated security violations' })
+    socket.disconnect()
+  } else {
+    socket.emit('error', { message: `Unauthorized action: ${reason}` })
+  }
+}
+
 export const initSocket = (res: SocketServer) => {
   if (!res.socket.server.io) {
-    // Initializing Socket.IO server silently
-    
     const io = new SocketIOServer(res.socket.server, {
       path: '/api/socket',
       addTrailingSlash: false,
@@ -24,53 +101,195 @@ export const initSocket = (res: SocketServer) => {
       }
     })
 
-    // Handle socket connections
-    io.on('connection', (socket) => {
-      // User connected silently
+    // Handle socket connections with authentication
+    io.on('connection', async (socket: Socket) => {
+      const socketAny = socket as any
+      
+      // Authenticate socket on connection
+      const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace('Bearer ', '')
+      
+      if (!token) {
+        socket.emit('error', { message: 'Authentication required' })
+        socket.disconnect()
+        return
+      }
 
-      // Join user to their personal room for notifications
+      const isAuthenticated = await authenticateSocket(socket, token)
+      if (!isAuthenticated) {
+        socket.emit('error', { message: 'Invalid authentication token' })
+        socket.disconnect()
+        return
+      }
+
+      // 1) Join user room - validate userId matches authenticated user
       socket.on('join-user-room', (userId: string) => {
+        if (!socketAny.userId) {
+          handleViolation(socket, 'Not authenticated')
+          return
+        }
+
+        if (socketAny.userId !== userId) {
+          handleViolation(socket, `Attempted to join room for different user (${userId})`)
+          return
+        }
+
         socket.join(`user:${userId}`)
       })
 
-      // Join project room for project-specific messaging
-      socket.on('join-project-room', (projectId: string) => {
+      // Join project room - validate project membership/permission
+      socket.on('join-project-room', async (projectId: string) => {
+        if (!socketAny.userId) {
+          handleViolation(socket, 'Not authenticated')
+          return
+        }
+
+        const hasPermission = await checkProjectPermission(socketAny.userId, projectId)
+        if (!hasPermission) {
+          handleViolation(socket, `Unauthorized project access (${projectId})`)
+          return
+        }
+
         socket.join(`project:${projectId}`)
       })
 
-      // Handle new messages
-      socket.on('send-message', (messageData) => {
-        // Broadcast to project room
-        socket.to(`project:${messageData.projectId}`).emit('new-message', messageData)
-        
-        // Send to specific receiver
-        socket.to(`user:${messageData.receiverId}`).emit('new-message', messageData)
+      // 2) Send message - authenticate sender and validate permissions
+      socket.on('send-message', async (messageData) => {
+        if (!socketAny.userId) {
+          handleViolation(socket, 'Not authenticated for messaging')
+          return
+        }
+
+        // Override any client-supplied senderId with authenticated user ID
+        const sanitizedData = {
+          ...messageData,
+          senderId: socketAny.userId, // Use authenticated user ID
+          text: typeof messageData.text === 'string' ? messageData.text.trim() : '', // Sanitize message
+        }
+
+        // Validate required fields
+        if (!sanitizedData.projectId || !sanitizedData.receiverId || !sanitizedData.text) {
+          handleViolation(socket, 'Invalid message data')
+          return
+        }
+
+        // Validate sender has permission for this project
+        const hasProjectPermission = await checkProjectPermission(socketAny.userId, sanitizedData.projectId)
+        if (!hasProjectPermission) {
+          handleViolation(socket, `Unauthorized messaging for project ${sanitizedData.projectId}`)
+          return
+        }
+
+        // Validate receiver exists and sender isn't messaging themselves
+        if (sanitizedData.senderId === sanitizedData.receiverId) {
+          handleViolation(socket, 'Cannot send message to self')
+          return
+        }
+
+        // Broadcast to project room and receiver
+        socket.to(`project:${sanitizedData.projectId}`).emit('new-message', sanitizedData)
+        socket.to(`user:${sanitizedData.receiverId}`).emit('new-message', sanitizedData)
       })
 
-      // Handle message read status
-      socket.on('mark-message-read', (data) => {
-        socket.to(`user:${data.senderId}`).emit('message-read', data)
+      // 3) Mark message as read - validate authorization
+      socket.on('mark-message-read', async (data) => {
+        if (!socketAny.userId) {
+          handleViolation(socket, 'Not authenticated for message read')
+          return
+        }
+
+        const { messageId, senderId } = data
+
+        if (!messageId || !senderId) {
+          handleViolation(socket, 'Invalid message read data')
+          return
+        }
+
+        try {
+          // Verify the message exists and the socket user is the receiver
+          const [message] = await db
+            .select({
+              id: messages.id,
+              senderId: messages.senderId,
+              receiverId: messages.receiverId,
+              projectId: messages.projectId
+            })
+            .from(messages)
+            .where(eq(messages.id, messageId))
+            .limit(1)
+
+          if (!message) {
+            handleViolation(socket, `Message not found (${messageId})`)
+            return
+          }
+
+          // Only the message receiver can mark it as read
+          if (message.receiverId !== socketAny.userId) {
+            handleViolation(socket, `Unauthorized message read attempt (${messageId})`)
+            return
+          }
+
+          // Notify the sender
+          socket.to(`user:${senderId}`).emit('message-read', {
+            messageId,
+            readBy: socketAny.userId
+          })
+        } catch (error) {
+          console.error('Error validating message read:', error)
+          handleViolation(socket, 'Message read validation failed')
+        }
       })
 
-      // Handle typing indicators
-      socket.on('typing-start', (data) => {
+      // Handle typing indicators with validation
+      socket.on('typing-start', async (data) => {
+        if (!socketAny.userId) {
+          handleViolation(socket, 'Not authenticated for typing indicator')
+          return
+        }
+
+        if (data.userId !== socketAny.userId) {
+          handleViolation(socket, 'Invalid typing user ID')
+          return
+        }
+
+        const hasPermission = await checkProjectPermission(socketAny.userId, data.projectId)
+        if (!hasPermission) {
+          handleViolation(socket, `Unauthorized typing indicator for project ${data.projectId}`)
+          return
+        }
+
         socket.to(`project:${data.projectId}`).emit('user-typing', {
-          userId: data.userId,
+          userId: socketAny.userId,
           projectId: data.projectId,
           receiverId: data.receiverId
         })
       })
 
-      socket.on('typing-stop', (data) => {
+      socket.on('typing-stop', async (data) => {
+        if (!socketAny.userId) {
+          handleViolation(socket, 'Not authenticated for typing indicator')
+          return
+        }
+
+        if (data.userId !== socketAny.userId) {
+          handleViolation(socket, 'Invalid typing user ID')
+          return
+        }
+
+        const hasPermission = await checkProjectPermission(socketAny.userId, data.projectId)
+        if (!hasPermission) {
+          handleViolation(socket, `Unauthorized typing indicator for project ${data.projectId}`)
+          return
+        }
+
         socket.to(`project:${data.projectId}`).emit('user-stopped-typing', {
-          userId: data.userId,
+          userId: socketAny.userId,
           projectId: data.projectId,
           receiverId: data.receiverId
         })
       })
 
       socket.on('disconnect', () => {
-        // User disconnected silently
+        // User disconnected
       })
     })
 

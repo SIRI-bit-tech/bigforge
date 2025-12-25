@@ -55,8 +55,8 @@ export default function BidDetailPage({
 
   // Check if current user can view this bid
   const canViewBid = currentUser && (
-    currentUser.role === 'CONTRACTOR' && project?.createdById === currentUser.id ||
-    currentUser.role === 'SUBCONTRACTOR' && bid?.subcontractorId === currentUser.id
+    (currentUser.role === 'CONTRACTOR' && project?.createdById === currentUser.id) ||
+    (currentUser.role === 'SUBCONTRACTOR' && bid?.subcontractorId === currentUser.id)
   )
 
   const handleAwardBid = async () => {
@@ -104,6 +104,16 @@ export default function BidDetailPage({
         ? bid.subcontractorId 
         : project?.createdById
       
+      // Validate receiverId before sending message
+      if (!receiverId) {
+        toast({
+          title: "Error",
+          description: "Unable to send message: recipient not found.",
+          variant: "destructive",
+        })
+        return
+      }
+      
       await sendMessage({
         projectId: projectId,
         receiverId: receiverId,
@@ -135,9 +145,21 @@ export default function BidDetailPage({
     
     setSubmitting(true)
     try {
+      const receiverId = bid.subcontractorId
+      
+      // Validate receiverId before sending message
+      if (!receiverId) {
+        toast({
+          title: "Error",
+          description: "Unable to send clarification: recipient not found.",
+          variant: "destructive",
+        })
+        return
+      }
+      
       await sendMessage({
         projectId: projectId,
-        receiverId: bid.subcontractorId,
+        receiverId: receiverId,
         text: `Clarification Request for Bid:\n\n${clarificationText}`,
       })
       

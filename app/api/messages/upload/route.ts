@@ -3,6 +3,60 @@ import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { verifyJWT } from '@/lib/services/auth'
 
+// Define allowed file types and extensions
+const ALLOWED_MIME_TYPES = [
+  // Images
+  'image/jpeg',
+  'image/jpg', 
+  'image/png',
+  'image/gif',
+  'image/webp',
+  // Documents
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  // Text files
+  'text/plain',
+  'text/csv',
+  // Archives
+  'application/zip',
+  'application/x-zip-compressed',
+]
+
+const ALLOWED_EXTENSIONS = [
+  'jpg', 'jpeg', 'png', 'gif', 'webp',
+  'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+  'txt', 'csv', 'zip'
+]
+
+// Sanitize and validate file extension
+function getValidatedExtension(fileName: string, mimeType: string): string | null {
+  // Extract extension from filename (handle files without extensions)
+  const parts = fileName.toLowerCase().split('.')
+  if (parts.length < 2) {
+    return null // No extension
+  }
+  
+  // Get the last part as extension (handles double extensions)
+  const extension = parts[parts.length - 1]
+  
+  // Validate extension is in allowed list
+  if (!ALLOWED_EXTENSIONS.includes(extension)) {
+    return null
+  }
+  
+  // Cross-validate with MIME type for additional security
+  if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
+    return null
+  }
+  
+  return extension
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Authentication check
@@ -60,11 +114,19 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Generate unique filename
+      // Validate file type and extension
+      const validExtension = getValidatedExtension(file.name, file.type)
+      if (!validExtension) {
+        return NextResponse.json(
+          { error: `File ${file.name} has an unsupported file type. Allowed types: images, documents, text files, and archives.` },
+          { status: 400 }
+        )
+      }
+
+      // Generate secure filename with validated extension
       const timestamp = Date.now()
       const randomString = Math.random().toString(36).substring(2, 15)
-      const fileExtension = file.name.split('.').pop()
-      const fileName = `${timestamp}_${randomString}.${fileExtension}`
+      const fileName = `${timestamp}_${randomString}.${validExtension}`
       
       // Convert file to buffer and save
       const bytes = await file.arrayBuffer()

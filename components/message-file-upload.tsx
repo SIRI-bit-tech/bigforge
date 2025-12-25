@@ -3,7 +3,6 @@
 import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Progress } from "@/components/ui/progress"
 import { useToast } from "@/hooks/use-toast"
 import { Paperclip, X, FileText, Image, Video, Download } from "lucide-react"
 import { MessageAttachment } from "@/lib/types"

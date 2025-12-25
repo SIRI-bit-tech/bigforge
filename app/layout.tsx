@@ -32,7 +32,10 @@ export const metadata: Metadata = {
         type: "image/svg+xml",
       },
     ],
-    apple: "/favicon-32x32.svg",
+    apple: {
+      url: "/apple-touch-icon.png",
+      sizes: "180x180"
+    },
   },
 }
 

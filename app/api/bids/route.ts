@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     // Only subcontractors can submit bids
     if (payload.role !== 'SUBCONTRACTOR') {
-      console.warn(`User ${payload.userId} with role ${payload.role} attempted to submit bid`)
+      console.warn(`User with role ${payload.role} attempted to submit bid`)
       return NextResponse.json(
         { error: 'Only subcontractors can submit bids' },
         { status: 403 }

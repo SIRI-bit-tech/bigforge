@@ -55,8 +55,8 @@ export default function BidDetailPage({
 
   // Check if current user can view this bid
   const canViewBid = currentUser && (
-    currentUser.role === 'CONTRACTOR' && project?.createdById === currentUser.id ||
-    currentUser.role === 'SUBCONTRACTOR' && bid?.subcontractorId === currentUser.id
+    (currentUser.role === 'CONTRACTOR' && project?.createdById === currentUser.id) ||
+    (currentUser.role === 'SUBCONTRACTOR' && bid?.subcontractorId === currentUser.id)
   )
 
   const handleAwardBid = async () => {
@@ -103,6 +103,16 @@ export default function BidDetailPage({
       const receiverId = currentUser.role === 'CONTRACTOR' 
         ? bid.subcontractorId 
         : project?.createdById
+      
+      // Validate receiverId before sending message
+      if (!receiverId) {
+        toast({
+          title: "Error",
+          description: "Unable to send message: recipient not found.",
+          variant: "destructive",
+        })
+        return
+      }
       
       await sendMessage({
         projectId: projectId,

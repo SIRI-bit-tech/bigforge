@@ -7,7 +7,6 @@ import { verifyJWT } from '@/lib/services/auth'
 const ALLOWED_MIME_TYPES = [
   // Images
   'image/jpeg',
-  'image/jpg', 
   'image/png',
   'image/gif',
   'image/webp',

@@ -32,7 +32,30 @@ const ALLOWED_EXTENSIONS = [
   'txt', 'csv', 'zip'
 ]
 
-// Sanitize and validate file extension
+// Map extensions to their allowed MIME types (handles aliases like jpg/jpeg)
+const EXTENSION_MIME_MAP: Record<string, string[]> = {
+  // Images - handle jpg/jpeg aliases
+  'jpg': ['image/jpeg'],
+  'jpeg': ['image/jpeg'],
+  'png': ['image/png'],
+  'gif': ['image/gif'],
+  'webp': ['image/webp'],
+  // Documents
+  'pdf': ['application/pdf'],
+  'doc': ['application/msword'],
+  'docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  'xls': ['application/vnd.ms-excel'],
+  'xlsx': ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+  'ppt': ['application/vnd.ms-powerpoint'],
+  'pptx': ['application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+  // Text files
+  'txt': ['text/plain'],
+  'csv': ['text/csv'],
+  // Archives
+  'zip': ['application/zip', 'application/x-zip-compressed']
+}
+
+// Sanitize and validate file extension with MIME type correspondence
 function getValidatedExtension(fileName: string, mimeType: string): string | null {
   // Extract extension from filename (handle files without extensions)
   const parts = fileName.toLowerCase().split('.')
@@ -48,9 +71,15 @@ function getValidatedExtension(fileName: string, mimeType: string): string | nul
     return null
   }
   
-  // Cross-validate with MIME type for additional security
-  if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
-    return null
+  // Get allowed MIME types for this extension
+  const allowedMimeTypes = EXTENSION_MIME_MAP[extension]
+  if (!allowedMimeTypes) {
+    return null // Extension not in mapping
+  }
+  
+  // Validate that the provided MIME type matches the extension
+  if (!allowedMimeTypes.includes(mimeType)) {
+    return null // MIME type doesn't match extension
   }
   
   return extension

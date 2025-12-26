@@ -95,6 +95,7 @@ interface AppState {
 
   // Notification actions
   createNotification: (data: Partial<Notification>) => Notification
+  addNotification: (notification: Notification) => void
   loadNotifications: () => Promise<Notification[]>
   getNotificationsByUser: (userId: string) => Notification[]
   markNotificationAsRead: (id: string) => void
@@ -943,6 +944,18 @@ export const useStore = create<AppState>((set, get) => ({
     }
     set((state) => ({ notifications: [newNotification, ...state.notifications] }))
     return newNotification
+  },
+
+  addNotification: (notification) => {
+    set((state) => {
+      // Check if notification already exists to prevent duplicates
+      const notificationExists = state.notifications.some(n => n.id === notification.id)
+      if (notificationExists) {
+        return state // Don't add duplicate
+      }
+      
+      return { notifications: [notification, ...state.notifications] }
+    })
   },
 
   loadNotifications: async () => {

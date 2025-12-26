@@ -4,7 +4,7 @@ import { useStore } from '@/lib/store'
 
 export const useSocket = () => {
   const socketRef = useRef<Socket | null>(null)
-  const { currentUser, addMessage, markMessageAsRead, loadNotifications } = useStore()
+  const { currentUser, addMessage, markMessageAsRead, loadNotifications, addNotification } = useStore()
 
   useEffect(() => {
     if (!currentUser) return
@@ -87,20 +87,14 @@ export const useSocket = () => {
 
         // Listen for new notifications
         socket.on('new-notification', (notificationData) => {
-          // Add the notification directly to the store for instant display
+          // Format the notification with proper date parsing
           const formattedNotification = {
             ...notificationData,
             createdAt: new Date(notificationData.createdAt),
           }
           
-          // Add to local store immediately for real-time display
-          const { notifications } = useStore.getState()
-          useStore.setState({ 
-            notifications: [formattedNotification, ...notifications] 
-          })
-          
-          // Also reload all notifications to ensure consistency
-          loadNotifications()
+          // Add to local store immediately for real-time display using proper store action
+          addNotification(formattedNotification)
         })
 
         // Listen for typing indicators
@@ -132,7 +126,7 @@ export const useSocket = () => {
         socketRef.current = null
       }
     }
-  }, [currentUser, addMessage, markMessageAsRead, loadNotifications])
+  }, [currentUser, addMessage, markMessageAsRead, loadNotifications, addNotification])
 
   const sendMessage = (messageData: any) => {
     if (socketRef.current) {

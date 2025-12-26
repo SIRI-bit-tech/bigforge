@@ -5,6 +5,9 @@ import { verifyJWT } from '@/lib/services/auth'
 
 export async function POST(request: NextRequest) {
   try {
+    // Note: This endpoint is primarily for system-generated notifications
+    // Consider restricting to system/admin roles only if user-created notifications aren't needed
+    
     // Authentication check
     const token = request.cookies.get('auth-token')?.value
 
@@ -28,10 +31,23 @@ export async function POST(request: NextRequest) {
     // Validate input
     if (!userId || !type || !title || !message) {
       return NextResponse.json(
-        { error: 'userId, type, title, and message are required' },
+        { error: 'Missing required fields: userId, type, title, and message are required' },
         { status: 400 }
       )
     }
+
+    // Authorization check: Only system/admin roles can create notifications
+    // Regular users should not be able to create arbitrary notifications
+    if (payload.role !== 'ADMIN' && payload.role !== 'SYSTEM') {
+      console.warn(`User ${payload.userId} with role ${payload.role} attempted to create notification`)
+      return NextResponse.json(
+        { error: 'Access denied. Only system administrators can create notifications.' },
+        { status: 403 }
+      )
+    }
+
+    // Additional validation: Even admins should only create notifications for valid users
+    // (In a real system, you might want to verify the target userId exists in the users table)
 
     // Create notification
     const [newNotification] = await db

@@ -142,9 +142,12 @@ export async function POST(request: NextRequest) {
         }).returning()
 
         // Broadcast notification via WebSocket for real-time updates
-        setTimeout(() => {
+        try {
           broadcastNotification(subcontractorId, notification)
-        }, 100)
+        } catch (broadcastError) {
+          console.error('Failed to broadcast notification:', broadcastError)
+          // Continue even if broadcast fails - notification is still saved to database
+        }
       } catch (notificationError) {
         console.error('Failed to create notification for subcontractor:', subcontractorId, notificationError)
         // Continue with other notifications even if one fails

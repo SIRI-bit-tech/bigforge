@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useStore } from "@/lib/store"
 import { useSocket } from "@/lib/hooks/useSocket"
@@ -36,16 +36,26 @@ export function NotificationsDropdown() {
   
   // Track previous unread count to detect new notifications
   const [prevUnreadCount, setPrevUnreadCount] = useState(0)
+  const isFirstRender = useRef(true)
   
   useEffect(() => {
-    if (unreadCount > prevUnreadCount && prevUnreadCount > 0) {
+    // Skip animation on first render
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      setPrevUnreadCount(unreadCount)
+      return
+    }
+    
+    // For subsequent updates, animate when unread count increases
+    if (unreadCount > prevUnreadCount) {
       setHasNewNotification(true)
       // Reset animation after 3 seconds
       const timer = setTimeout(() => setHasNewNotification(false), 3000)
       return () => clearTimeout(timer)
     }
+    
     setPrevUnreadCount(unreadCount)
-  }, [unreadCount, prevUnreadCount])
+  }, [unreadCount])
   
   const recentNotifications = notifications.slice(0, 5) // Show only 5 most recent
 

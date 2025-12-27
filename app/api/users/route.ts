@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { logError } from '@/lib/logger'
 import { db, users } from '@/lib/db'
 import { eq, and, count } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
@@ -9,7 +10,7 @@ export async function GET(request: NextRequest) {
     const token = request.cookies.get('auth-token')?.value
 
     if (!token) {
-      console.warn('Users fetch attempt without authentication token')
+      // Users fetch attempt without authentication token
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     const payload = verifyJWT(token)
     if (!payload) {
-      console.warn('Users fetch attempt with invalid token')
+      // Users fetch attempt with invalid token
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }
@@ -52,22 +53,22 @@ export async function GET(request: NextRequest) {
     // 2) Authorization - perform role-based access control
     if (payload.role === 'ADMIN') {
       // ADMIN role can query all users - no additional filtering needed
-      console.log(`Admin ${payload.userId} accessing all users`)
+      // Admin accessing all users
     } else if (payload.role === 'CONTRACTOR') {
       // CONTRACTORS can view:
       // - All SUBCONTRACTORS (for inviting to projects)
       // - Users from their own company (if they have one)
       if (role === 'SUBCONTRACTOR') {
         // Allow contractors to see all subcontractors for project invitations
-        console.log(`Contractor ${payload.userId} accessing all subcontractors`)
+        // Contractor accessing all subcontractors
       } else if (payload.companyId) {
         // If querying other roles, restrict to same company
         mainWhereConditions.push(eq(users.companyId, payload.companyId))
-        console.log(`Contractor ${payload.userId} accessing company ${payload.companyId} users`)
+        // Contractor accessing company users
       } else {
         // Contractor without company can only see subcontractors
         if (!role || role !== 'SUBCONTRACTOR') {
-          console.warn(`Contractor ${payload.userId} without company attempted to access non-subcontractor users`)
+          // Contractor without company attempted to access non-subcontractor users
           return NextResponse.json(
             { error: 'Access denied. Contractors can view subcontractors or users from their company.' },
             { status: 403 }
@@ -81,18 +82,18 @@ export async function GET(request: NextRequest) {
       // - Contractors (for messaging)
       if (role === 'SUBCONTRACTOR') {
         // Allow subcontractors to see other subcontractors
-        console.log(`Subcontractor ${payload.userId} accessing all subcontractors`)
+        // Subcontractor accessing all subcontractors
       } else if (role === 'CONTRACTOR') {
         // Allow subcontractors to see contractors for messaging
-        console.log(`Subcontractor ${payload.userId} accessing all contractors`)
+        // Subcontractor accessing all contractors
       } else if (payload.companyId) {
         // If querying other roles, restrict to same company
         mainWhereConditions.push(eq(users.companyId, payload.companyId))
-        console.log(`Subcontractor ${payload.userId} accessing company ${payload.companyId} users`)
+        // Subcontractor accessing company users
       } else {
         // Subcontractor without company can see subcontractors and contractors
         if (!role || !['SUBCONTRACTOR', 'CONTRACTOR'].includes(role)) {
-          console.warn(`Subcontractor ${payload.userId} without company attempted to access non-subcontractor/contractor users`)
+          // Subcontractor without company attempted to access non-subcontractor/contractor users
           return NextResponse.json(
             { error: 'Access denied. Subcontractors can view other subcontractors, contractors, or users from their company.' },
             { status: 403 }
@@ -101,7 +102,7 @@ export async function GET(request: NextRequest) {
       }
     } else {
       // Unknown role
-      console.warn(`User ${payload.userId} with unknown role ${payload.role} attempted to access users`)
+      // User with unknown role attempted to access users
       return NextResponse.json(
         { error: 'Access denied. Invalid user role.' },
         { status: 403 }
@@ -171,9 +172,14 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Failed to fetch users:', error)
+    logError('users endpoint error', error, {
+      endpoint: '/api/users',
+      errorType: 'users_error',
+      severity: 'high'
+    })
+    
     return NextResponse.json(
-      { error: 'Failed to fetch users' },
+      { error: 'Failed to fetch users'  },
       { status: 500 }
     )
   }

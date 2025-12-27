@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { logError } from '@/lib/logger'
 import { db, messages, users, projects, bids } from '@/lib/db'
 import { eq, and, or, desc } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
@@ -10,7 +11,7 @@ export async function GET(request: NextRequest) {
     const token = request.cookies.get('auth-token')?.value
 
     if (!token) {
-      console.warn('Messages fetch attempt without authentication token')
+      // Messages fetch attempt without authentication token
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     const payload = verifyJWT(token)
     if (!payload) {
-      console.warn('Messages fetch attempt with invalid token')
+      // Messages fetch attempt with invalid token
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }
@@ -86,13 +87,18 @@ export async function GET(request: NextRequest) {
       sentAt: msg.sentAt.toISOString()
     }))
 
-    console.log(`User ${authenticatedUserId} fetched ${formattedMessages.length} messages${projectId ? ` for project ${projectId}` : ''}`)
+    // User fetched messages
 
     return NextResponse.json({ messages: formattedMessages })
   } catch (error) {
-    console.error('Error fetching messages:', error)
+    logError('messages endpoint error', error, {
+      endpoint: '/api/messages',
+      errorType: 'messages_error',
+      severity: 'high'
+    })
+    
     return NextResponse.json(
-      { error: 'Failed to fetch messages' },
+      { error: 'Failed to fetch messages'  },
       { status: 500 }
     )
   }
@@ -105,7 +111,7 @@ export async function POST(request: NextRequest) {
     const token = request.cookies.get('auth-token')?.value
 
     if (!token) {
-      console.warn('Message send attempt without authentication token')
+      // Message send attempt without authentication token
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -114,7 +120,7 @@ export async function POST(request: NextRequest) {
 
     const payload = verifyJWT(token)
     if (!payload) {
-      console.warn('Message send attempt with invalid token')
+      // Message send attempt with invalid token
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }
@@ -173,7 +179,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!canSendMessage) {
-      console.warn(`User ${authenticatedUserId} attempted to send message for unauthorized project ${projectId}`)
+      // User attempted to send message for unauthorized project
       return NextResponse.json(
         { error: 'Access denied. You must be the project owner or have submitted a bid to send messages for this project.' },
         { status: 403 }
@@ -216,14 +222,7 @@ export async function POST(request: NextRequest) {
       })
       .returning()
 
-    console.info('Message sent:', {
-      messageId: newMessage.id,
-      projectId,
-      senderId: authenticatedUserId.replace(/(.{2}).*/, '$1***'),
-      receiverId: receiverId.replace(/(.{2}).*/, '$1***'),
-      timestamp: new Date().toISOString(),
-      hasAttachments: !!(attachments && attachments.length > 0)
-    })
+    // Message sent: messageId, projectId, senderId, receiverId, timestamp, hasAttachments
 
     // Format the message for JSON response
     const formattedMessage = {
@@ -234,9 +233,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ message: formattedMessage }, { status: 201 })
   } catch (error) {
-    console.error('Error sending message:', error)
+    logError('messages endpoint error', error, {
+      endpoint: '/api/messages',
+      errorType: 'messages_error',
+      severity: 'high'
+    })
+    
     return NextResponse.json(
-      { error: 'Failed to send message' },
+      { error: 'Failed to send message'  },
       { status: 500 }
     )
   }

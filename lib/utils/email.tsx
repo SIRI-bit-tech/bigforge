@@ -11,8 +11,7 @@ interface EmailParams {
 // Send email using configured service (SendGrid, Resend, etc.)
 export async function sendEmail({ to, subject, html, from = "noreply@bidforge.com" }: EmailParams) {
   // In production, integrate with SendGrid or other email service
-  // For now, log the email for development
-  console.log("[v0] Email sent:", { to, subject, from })
+  // For now, silently handle email for development
 
   // Example with SendGrid (uncomment when API key is configured):
   /*

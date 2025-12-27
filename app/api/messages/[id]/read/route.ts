@@ -74,7 +74,7 @@ export async function PATCH(
 
     return NextResponse.json({ message: updatedMessage })
   } catch (error) {
-    console.error('Error marking message as read:', error)
+    // Error marking message as read
     return NextResponse.json(
       { error: 'Failed to mark message as read' },
       { status: 500 }

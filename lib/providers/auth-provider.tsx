@@ -31,7 +31,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       try {
         await restoreSession()
       } catch (error) {
-        console.error('Failed to restore session:', error)
+        // Failed to restore session
       } finally {
         setIsLoading(false)
         setIsInitialized(true)

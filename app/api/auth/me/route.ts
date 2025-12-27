@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyJWT } from '@/lib/services/auth'
 import { db, users } from '@/lib/db'
 import { eq } from 'drizzle-orm'
+import { logError } from '@/lib/logger'
 
 export async function GET(request: NextRequest) {
+  let token: string | undefined
+  let payload: any
+  
   try {
     // Get token from HTTP-only cookie
-    const token = request.cookies.get('auth-token')?.value
+    token = request.cookies.get('auth-token')?.value
 
     if (!token) {
       return NextResponse.json(
@@ -16,7 +20,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify JWT token
-    const payload = verifyJWT(token)
+    payload = verifyJWT(token)
     if (!payload) {
       return NextResponse.json(
         { error: 'Invalid or expired token' },
@@ -66,7 +70,16 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Session verification error:', error)
+    // Log database/auth errors with email notification
+    logError('Session verification failed', error, {
+      endpoint: '/api/auth/me',
+      userId: payload?.userId || 'unknown',
+      hasToken: !!token,
+      errorType: 'session_verification',
+      userAgent: request.headers.get('user-agent'),
+      ip: request.headers.get('x-forwarded-for') || 'unknown'
+    })
+    
     return NextResponse.json(
       { error: 'Session verification failed' },
       { status: 500 }

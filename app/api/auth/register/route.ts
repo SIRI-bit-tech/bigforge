@@ -4,6 +4,7 @@ import { sendVerificationEmail } from '@/lib/services/email'
 import { db, users, verificationCodes } from '@/lib/db'
 import { eq } from 'drizzle-orm'
 import { getRateLimitKey, checkRateLimit, RATE_LIMITS, formatTimeRemaining } from '@/lib/utils/rate-limit'
+import { logError, logWarning } from '@/lib/logger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -137,7 +138,14 @@ export async function POST(request: NextRequest) {
 
 
     } catch (dbError) {
-      console.error('Database error during user creation:', dbError)
+      // Log database errors with email notification
+      logError('Database error during user registration', dbError, {
+        endpoint: '/api/auth/register',
+        email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
+        errorType: 'registration_database_error',
+        severity: 'critical'
+      })
+      
       return NextResponse.json(
         { error: 'Failed to create account. Please try again.' },
         { status: 500 }
@@ -149,11 +157,13 @@ export async function POST(request: NextRequest) {
       await sendVerificationEmail(email, verificationData.code, name)
 
     } catch (emailError) {
-      console.error('Failed to send verification email:', {
-        error: emailError,
+      // Log email sending errors
+      logError('Failed to send verification email', emailError, {
+        endpoint: '/api/auth/register',
         userId: newUser.id,
         email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-        timestamp: new Date().toISOString()
+        errorType: 'email_sending_error',
+        severity: 'medium'
       })
 
       // TODO: In production, implement a job queue for email retry
@@ -183,7 +193,15 @@ export async function POST(request: NextRequest) {
     }, { status: 201 })
 
   } catch (error) {
-    console.error('Registration error:', error)
+    // Log registration system errors with email notification
+    logError('Registration system error', error, {
+      endpoint: '/api/auth/register',
+      userAgent: request.headers.get('user-agent'),
+      ip: request.headers.get('x-forwarded-for') || 'unknown',
+      errorType: 'registration_system_error',
+      severity: 'high'
+    })
+    
     return NextResponse.json(
       { error: 'Registration failed. Please try again.' },
       { status: 500 }

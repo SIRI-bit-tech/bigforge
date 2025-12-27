@@ -58,7 +58,7 @@ export async function sendVerificationEmail(
   try {
     await transporter.sendMail(mailOptions)
   } catch (error) {
-    console.error('Error sending verification email:', error)
+    // Error sending verification email
     throw new Error('Failed to send verification email')
   }
 }
@@ -117,7 +117,7 @@ export async function sendPasswordResetEmail(
   try {
     await transporter.sendMail(mailOptions)
   } catch (error) {
-    console.error('Error sending password reset email:', error)
+    // Error sending password reset email
     throw new Error('Failed to send password reset email')
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, projects, projectTrades, trades } from '@/lib/db'
 import { eq } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
+import { logError } from '@/lib/logger'
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,7 +10,7 @@ export async function GET(request: NextRequest) {
     const token = request.cookies.get('auth-token')?.value
 
     if (!token) {
-      console.warn('Projects fetch attempt without authentication token')
+      // Projects fetch attempt without authentication token
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     const payload = verifyJWT(token)
     if (!payload) {
-      console.warn('Projects fetch attempt with invalid token')
+      // Projects fetch attempt with invalid token
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }
@@ -114,7 +115,7 @@ export async function GET(request: NextRequest) {
 
     const result = Array.from(projectsMap.values())
 
-    console.log(`User ${payload.userId} (${payload.role}) fetched ${result.length} projects`)
+    // User fetched projects
 
     return NextResponse.json({
       success: true,
@@ -122,7 +123,15 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Failed to fetch projects:', error)
+    logError('Failed to fetch projects', error, {
+      endpoint: '/api/projects',
+      method: 'GET',
+      userId: payload?.userId || 'unknown',
+      userRole: payload?.role || 'unknown',
+      errorType: 'projects_fetch_error',
+      severity: 'medium'
+    })
+    
     return NextResponse.json(
       { error: 'Failed to fetch projects' },
       { status: 500 }
@@ -136,7 +145,7 @@ export async function POST(request: NextRequest) {
     const token = request.cookies.get('auth-token')?.value
 
     if (!token) {
-      console.warn('Project creation attempt without authentication token')
+      // Project creation attempt without authentication token
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -145,7 +154,7 @@ export async function POST(request: NextRequest) {
 
     const payload = verifyJWT(token)
     if (!payload) {
-      console.warn('Project creation attempt with invalid token')
+      // Project creation attempt with invalid token
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }
@@ -154,7 +163,7 @@ export async function POST(request: NextRequest) {
 
     // Only contractors can create projects
     if (payload.role !== 'CONTRACTOR') {
-      console.warn(`User ${payload.userId} with role ${payload.role} attempted to create project`)
+      // User with non-contractor role attempted to create project
       return NextResponse.json(
         { error: 'Access denied. Only contractors can create projects.' },
         { status: 403 }
@@ -192,7 +201,7 @@ export async function POST(request: NextRequest) {
       })
       .returning()
 
-    console.log(`User ${authenticatedUserId} created project ${project.id}: "${project.title}"`)
+    // User created project
 
     return NextResponse.json({
       success: true,
@@ -200,7 +209,15 @@ export async function POST(request: NextRequest) {
     }, { status: 201 })
 
   } catch (error) {
-    console.error('Failed to create project:', error)
+    logError('Failed to create project', error, {
+      endpoint: '/api/projects',
+      method: 'POST',
+      userId: payload?.userId || 'unknown',
+      userRole: payload?.role || 'unknown',
+      errorType: 'project_creation_error',
+      severity: 'high'
+    })
+    
     return NextResponse.json(
       { error: 'Failed to create project' },
       { status: 500 }

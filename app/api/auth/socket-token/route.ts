@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Socket token error:', error)
+    // Socket token error
     return NextResponse.json(
       { error: 'Failed to get socket token' },
       { status: 500 }

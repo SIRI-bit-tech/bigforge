@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     
     if (!rateLimit.allowed) {
       const resetIn = formatTimeRemaining(rateLimit.resetTime!)
-      console.warn(`Rate limit exceeded for email verification from ${rateLimitKey}`)
+      // Rate limit exceeded for email verification
       return NextResponse.json(
         { error: `Too many verification attempts. Please try again in ${resetIn}.` },
         { status: 429 }
@@ -31,11 +31,7 @@ export async function POST(request: NextRequest) {
 
     // Validate code format
     if (code.length !== 6 || !/^\d{6}$/.test(code)) {
-      console.warn('Invalid verification code format provided:', {
-        email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-        codeLength: code.length,
-        timestamp: new Date().toISOString()
-      })
+      // Invalid verification code format provided
       return NextResponse.json(
         { error: 'Invalid verification code format' },
         { status: 400 }
@@ -54,10 +50,7 @@ export async function POST(request: NextRequest) {
     // Security: Don't reveal if user exists or not - use generic error for both cases
     if (!user) {
       // Log for security monitoring without revealing user existence
-      console.warn('Verification attempt with invalid request:', {
-        timestamp: new Date().toISOString(),
-        ip: rateLimitKey.split(':')[1]
-      })
+      // Verification attempt with invalid request
       return NextResponse.json(
         { error: 'Invalid or expired verification code' },
         { status: 400 }
@@ -87,11 +80,7 @@ export async function POST(request: NextRequest) {
       .limit(1)
 
     if (!verificationRecord) {
-      console.warn('Invalid or expired verification code provided:', {
-        userId: user.id,
-        timestamp: new Date().toISOString(),
-        ip: rateLimitKey.split(':')[1]
-      })
+      // Invalid or expired verification code provided
       return NextResponse.json(
         { error: 'Invalid or expired verification code' },
         { status: 400 }
@@ -154,7 +143,7 @@ export async function POST(request: NextRequest) {
       return response
 
     } catch (dbError) {
-      console.error('Database error during email verification:', dbError)
+      // Database error during email verification
       return NextResponse.json(
         { error: 'Verification failed. Please try again.' },
         { status: 500 }
@@ -162,7 +151,7 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('Email verification error:', error)
+    // Email verification error
     return NextResponse.json(
       { error: 'Verification failed. Please try again.' },
       { status: 500 }

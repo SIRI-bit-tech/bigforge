@@ -80,7 +80,7 @@ export async function PATCH(
     })
 
   } catch (error) {
-    console.error('Failed to accept invitation:', error)
+    // Failed to accept invitation
     return NextResponse.json(
       { error: 'Failed to accept invitation' },
       { status: 500 }

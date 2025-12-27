@@ -245,7 +245,7 @@ export const useStore = create<AppState>((set, get) => ({
         method: 'POST',
       })
     } catch (error) {
-      console.error('Logout API call failed:', error)
+      // Logout API call failed
       // Continue with local logout even if API fails
     }
     
@@ -275,7 +275,7 @@ export const useStore = create<AppState>((set, get) => ({
       set({ currentUser: user, isAuthenticated: true })
       return user
     } catch (error) {
-      console.error('Session restoration failed:', error)
+      // Session restoration failed
       set({ currentUser: null, isAuthenticated: false })
       return null
     }
@@ -318,7 +318,7 @@ export const useStore = create<AppState>((set, get) => ({
       set({ users })
       return users
     } catch (error) {
-      console.error('Failed to load users:', error)
+      // Failed to load users
       return []
     }
   },
@@ -341,7 +341,7 @@ export const useStore = create<AppState>((set, get) => ({
       set({ companies })
       return companies
     } catch (error) {
-      console.error('Failed to load companies:', error)
+      // Failed to load companies
       return []
     }
   },
@@ -367,7 +367,7 @@ export const useStore = create<AppState>((set, get) => ({
       set({ projects })
       return projects
     } catch (error) {
-      console.error('Failed to load projects:', error)
+      // Failed to load projects
       return []
     }
   },
@@ -397,7 +397,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       return subcontractors
     } catch (error) {
-      console.error('Failed to load subcontractors:', error)
+      // Failed to load subcontractors
       return []
     }
   },
@@ -660,7 +660,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       return bids
     } catch (error) {
-      console.error('Failed to load bids:', error)
+      // Failed to load bids
       return []
     }
   },
@@ -714,7 +714,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       return newInvitations
     } catch (error) {
-      console.error('Failed to send invitations:', error)
+      // Failed to send invitations
       throw error
     }
   },
@@ -740,7 +740,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       return get().invitations.find((inv) => inv.id === id)!
     } catch (error) {
-      console.error('Failed to accept invitation:', error)
+      // Failed to accept invitation
       throw error
     }
   },
@@ -766,7 +766,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       return get().invitations.find((inv) => inv.id === id)!
     } catch (error) {
-      console.error('Failed to decline invitation:', error)
+      // Failed to decline invitation
       throw error
     }
   },
@@ -868,7 +868,7 @@ export const useStore = create<AppState>((set, get) => ({
       set({ messages })
       return messages
     } catch (error) {
-      console.error('Failed to fetch messages:', error)
+      // Failed to fetch messages
       throw error
     }
   },
@@ -913,7 +913,7 @@ export const useStore = create<AppState>((set, get) => ({
         messages: state.messages.map((m) => (m.id === id ? { ...m, read: true } : m)),
       }))
     } catch (error) {
-      console.error(`Error marking message ${id} as read:`, error)
+      // Error marking message as read
       throw error
     }
   },
@@ -975,7 +975,7 @@ export const useStore = create<AppState>((set, get) => ({
       set({ notifications })
       return notifications
     } catch (error) {
-      console.error('Failed to load notifications:', error)
+      // Failed to load notifications
       return []
     }
   },
@@ -996,7 +996,7 @@ export const useStore = create<AppState>((set, get) => ({
     fetch(`/api/notifications/${id}/read`, {
       method: 'PATCH',
     }).catch(error => {
-      console.error('Failed to mark notification as read on server:', error)
+      // Failed to mark notification as read on server
     })
   },
 
@@ -1014,7 +1014,7 @@ export const useStore = create<AppState>((set, get) => ({
       },
       body: JSON.stringify({ userId }),
     }).catch(error => {
-      console.error('Failed to mark all notifications as read on server:', error)
+      // Failed to mark all notifications as read on server
     })
   },
 }))

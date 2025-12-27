@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { logError } from '@/lib/logger'
 import { db, documents, projects, bids } from '@/lib/db'
 import { eq, desc, and } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
@@ -9,7 +10,7 @@ export async function POST(request: NextRequest) {
     const token = request.cookies.get('auth-token')?.value
 
     if (!token) {
-      console.warn('Document upload attempt without authentication token')
+      // Document upload attempt without authentication token
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
 
     const payload = verifyJWT(token)
     if (!payload) {
-      console.warn('Document upload attempt with invalid token')
+      // Document upload attempt with invalid token
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
       .limit(1)
 
     if (!projectAccess) {
-      console.warn(`User ${payload.userId} attempted to upload document to non-existent project ${projectId}`)
+      // User attempted to upload document to non-existent project
       return NextResponse.json(
         { error: 'Project not found' },
         { status: 404 }
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!hasAccess) {
-      console.warn(`User ${payload.userId} attempted unauthorized document upload to project ${projectId}`)
+      // User attempted unauthorized document upload to project
       return NextResponse.json(
         { error: 'Access denied. You must be the project owner or have submitted a bid to upload documents.' },
         { status: 403 }
@@ -101,13 +102,18 @@ export async function POST(request: NextRequest) {
       })
       .returning()
 
-    console.log(`Document uploaded successfully: ${newDocument.id} by user ${payload.userId} to project ${projectId}`)
+    // Document uploaded successfully
 
     return NextResponse.json({ document: newDocument }, { status: 201 })
   } catch (error) {
-    console.error('Failed to save document:', error)
+    logError('documents endpoint error', error, {
+      endpoint: '/api/documents',
+      errorType: 'documents_error',
+      severity: 'high'
+    })
+    
     return NextResponse.json(
-      { error: 'Failed to save document' },
+      { error: 'Failed to save document'  },
       { status: 500 }
     )
   }
@@ -183,7 +189,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!hasAccess) {
-      console.warn(`User ${payload.userId} attempted unauthorized document access to project ${projectId}`)
+      // User attempted unauthorized document access to project
       return NextResponse.json(
         { error: 'Access denied. You must be the project owner or have submitted a bid to access documents.' },
         { status: 403 }
@@ -199,9 +205,14 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ documents: projectDocuments })
   } catch (error) {
-    console.error('Failed to fetch documents:', error)
+    logError('documents endpoint error', error, {
+      endpoint: '/api/documents',
+      errorType: 'documents_error',
+      severity: 'high'
+    })
+    
     return NextResponse.json(
-      { error: 'Failed to fetch documents' },
+      { error: 'Failed to fetch documents'  },
       { status: 500 }
     )
   }

@@ -338,7 +338,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           isOpen={uploadModalOpen}
           onClose={() => setUploadModalOpen(false)}
           onUploadComplete={(document) => {
-            console.log('Document uploaded:', document)
+            // Document uploaded
             // You can add the document to the store or refresh the documents list here
           }}
         />

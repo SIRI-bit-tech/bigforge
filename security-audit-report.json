@@ -1,0 +1,132 @@
+{
+  "timestamp": "2025-12-27T10:48:42.790Z",
+  "summary": {
+    "totalChecks": 19,
+    "passed": 9,
+    "critical": 4,
+    "high": 4,
+    "medium": 2,
+    "low": 0,
+    "securityScore": 0
+  },
+  "issues": [
+    {
+      "timestamp": "2025-12-27T10:48:42.737Z",
+      "type": "CRITICAL",
+      "message": "Missing required environment variable: DATABASE_URL",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-12-27T10:48:42.750Z",
+      "type": "CRITICAL",
+      "message": "Missing required environment variable: JWT_SECRET",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-12-27T10:48:42.752Z",
+      "type": "CRITICAL",
+      "message": "Missing required environment variable: REDIS_HOST",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-12-27T10:48:42.752Z",
+      "type": "CRITICAL",
+      "message": "Missing required environment variable: SENTRY_DSN",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-12-27T10:48:42.755Z",
+      "type": "HIGH",
+      "message": "File .env is readable by others",
+      "details": "Permissions: 666"
+    },
+    {
+      "timestamp": "2025-12-27T10:48:42.756Z",
+      "type": "HIGH",
+      "message": "File package.json is readable by others",
+      "details": "Permissions: 666"
+    },
+    {
+      "timestamp": "2025-12-27T10:48:42.757Z",
+      "type": "HIGH",
+      "message": "File next.config.mjs is readable by others",
+      "details": "Permissions: 666"
+    },
+    {
+      "timestamp": "2025-12-27T10:48:42.776Z",
+      "type": "HIGH",
+      "message": "Error monitoring (Glitchtip) is not configured",
+      "details": ""
+    }
+  ],
+  "warnings": [
+    {
+      "timestamp": "2025-12-27T10:48:42.753Z",
+      "type": "MEDIUM",
+      "message": "NODE_ENV is not set to production",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-12-27T10:48:42.772Z",
+      "type": "MEDIUM",
+      "message": "Could not read middleware configuration",
+      "details": ""
+    }
+  ],
+  "passed": [
+    {
+      "timestamp": "2025-12-27T10:48:42.753Z",
+      "type": "PASS",
+      "message": "Debug flags are properly disabled",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-12-27T10:48:42.764Z",
+      "type": "PASS",
+      "message": "Next.js version is recent",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-12-27T10:48:42.765Z",
+      "type": "PASS",
+      "message": "Dependency check completed",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-12-27T10:48:42.768Z",
+      "type": "PASS",
+      "message": "Security headers are configured",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-12-27T10:48:42.769Z",
+      "type": "PASS",
+      "message": "X-Powered-By header is disabled",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-12-27T10:48:42.770Z",
+      "type": "PASS",
+      "message": "SVG uploads are properly restricted",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-12-27T10:48:42.773Z",
+      "type": "PASS",
+      "message": "Sensitive data exposure check completed",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-12-27T10:48:42.778Z",
+      "type": "PASS",
+      "message": "Health check endpoint exists",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-12-27T10:48:42.781Z",
+      "type": "PASS",
+      "message": "Metrics endpoint exists",
+      "details": ""
+    }
+  ]
+}

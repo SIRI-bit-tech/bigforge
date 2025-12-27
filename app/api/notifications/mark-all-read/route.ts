@@ -53,7 +53,7 @@ export async function PATCH(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Failed to mark all notifications as read:', error)
+    // Failed to mark all notifications as read
     return NextResponse.json(
       { error: 'Failed to mark all notifications as read' },
       { status: 500 }

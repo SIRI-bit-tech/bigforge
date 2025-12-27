@@ -3,6 +3,7 @@ import { verifyPassword, generateJWT } from '@/lib/services/auth'
 import { db, users } from '@/lib/db'
 import { eq } from 'drizzle-orm'
 import { getRateLimitKey, checkRateLimit, RATE_LIMITS, formatTimeRemaining } from '@/lib/utils/rate-limit'
+import { logError, logWarning } from '@/lib/logger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -116,7 +117,15 @@ export async function POST(request: NextRequest) {
     return response
 
   } catch (error) {
-    console.error('Login error:', error)
+    // Log login errors with email notification
+    logError('Login system error', error, {
+      endpoint: '/api/auth/login',
+      userAgent: request.headers.get('user-agent'),
+      ip: request.headers.get('x-forwarded-for') || 'unknown',
+      errorType: 'login_system_error',
+      severity: 'high'
+    })
+    
     return NextResponse.json(
       { error: 'Login failed. Please try again.' },
       { status: 500 }

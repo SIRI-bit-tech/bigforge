@@ -3,6 +3,7 @@ import { db, bids, projects, notifications } from '@/lib/db'
 import { eq, and } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
 import { broadcastNotification } from '@/lib/socket/server'
+import { logError } from '@/lib/logger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,7 +11,7 @@ export async function POST(request: NextRequest) {
     const token = request.cookies.get('auth-token')?.value
 
     if (!token) {
-      console.warn('Bid submission attempt without authentication token')
+      // Bid submission attempt without authentication token
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
 
     const payload = verifyJWT(token)
     if (!payload) {
-      console.warn('Bid submission attempt with invalid token')
+      // Bid submission attempt with invalid token
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
 
     // Only subcontractors can submit bids
     if (payload.role !== 'SUBCONTRACTOR') {
-      console.warn(`User with role ${payload.role} attempted to submit bid`)
+      // User with non-subcontractor role attempted to submit bid
       return NextResponse.json(
         { error: 'Only subcontractors can submit bids' },
         { status: 403 }
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
       })
       .returning()
 
-    console.log(`Bid submitted successfully: ${newBid.id} by user ${payload.userId} for project ${projectId}`)
+    // Bid submitted successfully
 
     // Create notification for project owner (contractor)
     try {
@@ -130,11 +131,11 @@ export async function POST(request: NextRequest) {
       try {
         broadcastNotification(project.createdById, notification)
       } catch (broadcastError) {
-        console.error('Failed to broadcast notification:', broadcastError)
+        // Failed to broadcast notification
         // Continue even if broadcast fails - notification is still saved to database
       }
     } catch (notificationError) {
-      console.error('Failed to create notification for project owner:', notificationError)
+      // Failed to create notification for project owner
       // Continue even if notification fails
     }
 
@@ -145,7 +146,16 @@ export async function POST(request: NextRequest) {
     }, { status: 201 })
 
   } catch (error) {
-    console.error('Failed to submit bid:', error)
+    logError('Failed to submit bid', error, {
+      endpoint: '/api/bids',
+      method: 'POST',
+      userId: payload?.userId || 'unknown',
+      userRole: payload?.role || 'unknown',
+      projectId: projectId || 'unknown',
+      errorType: 'bid_submission_error',
+      severity: 'high'
+    })
+    
     return NextResponse.json(
       { error: 'Failed to submit bid' },
       { status: 500 }
@@ -242,7 +252,15 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Failed to fetch bids:', error)
+    logError('Failed to fetch bids', error, {
+      endpoint: '/api/bids',
+      method: 'GET',
+      userId: payload?.userId || 'unknown',
+      userRole: payload?.role || 'unknown',
+      errorType: 'bids_fetch_error',
+      severity: 'medium'
+    })
+    
     return NextResponse.json(
       { error: 'Failed to fetch bids' },
       { status: 500 }

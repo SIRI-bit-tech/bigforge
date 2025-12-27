@@ -63,7 +63,7 @@ export async function getCurrentUser(sessionToken?: string) {
 
     return session?.user || null
   } catch (error) {
-    console.error("[v0] Error getting current user:", error)
+    // Error getting current user
     return null
   }
 }

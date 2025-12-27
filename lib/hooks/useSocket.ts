@@ -54,7 +54,7 @@ export const useSocket = () => {
         })
 
         socket.on('connect_error', (error) => {
-          console.error('Socket connection error:', error)
+          // Socket connection error
         })
 
         // Listen for new messages
@@ -107,14 +107,14 @@ export const useSocket = () => {
         })
 
         socket.on('error', (error) => {
-          console.error('Socket error:', error)
+          // Socket error
         })
 
         socket.on('disconnect', () => {
           // Disconnected from Socket.IO server
         })
       } catch (error) {
-        console.error('Failed to initialize socket:', error)
+        // Failed to initialize socket
       }
     }
 

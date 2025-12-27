@@ -4,6 +4,8 @@ import { NextApiResponse } from 'next'
 import { verifyJWT } from '@/lib/services/auth'
 import { db, projects, bids, messages } from '@/lib/db'
 import { eq, and } from 'drizzle-orm'
+import { checkRateLimit, RATE_LIMITS } from '@/lib/utils/rate-limit'
+import redis from '@/lib/cache/redis'
 
 export type SocketServer = NextApiResponse & {
   socket: {
@@ -16,6 +18,14 @@ export type SocketServer = NextApiResponse & {
 // Global reference to the socket server for broadcasting notifications
 let globalIO: SocketIOServer | null = null
 
+// Connection tracking for monitoring
+const connectionStats = {
+  totalConnections: 0,
+  authenticatedConnections: 0,
+  messagesSent: 0,
+  errorsCount: 0
+}
+
 // Function to get or initialize the socket server
 export const getSocketServer = (): SocketIOServer | null => {
   return globalIO
@@ -24,8 +34,11 @@ export const getSocketServer = (): SocketIOServer | null => {
 // Function to set the socket server (called from the API route)
 export const setSocketServer = (io: SocketIOServer) => {
   globalIO = io
-  console.log('✅ Socket server (globalIO) has been set')
+  // Socket server (globalIO) has been set
 }
+
+// Get connection statistics
+export const getConnectionStats = () => ({ ...connectionStats })
 
 // Helper function to broadcast notifications to a specific user
 export const broadcastNotification = (userId: string, notification: any) => {
@@ -56,10 +69,11 @@ const authenticateSocket = async (socket: Socket, token: string): Promise<boolea
     ;(socket as any).role = payload.role
     ;(socket as any).companyId = payload.companyId
     ;(socket as any).violationCount = 0
+    ;(socket as any).lastActivity = Date.now()
 
     return true
   } catch (error) {
-    console.warn('Socket authentication failed:', error)
+    // Socket authentication failed
     return false
   }
 }
@@ -92,7 +106,7 @@ const checkProjectPermission = async (userId: string, projectId: string): Promis
 
     return !!bid // Has submitted a bid
   } catch (error) {
-    console.error('Error checking project permission:', error)
+    // Error checking project permission
     return false
   }
 }
@@ -101,6 +115,9 @@ const checkProjectPermission = async (userId: string, projectId: string): Promis
 const handleViolation = (socket: Socket, reason: string) => {
   const socketAny = socket as any
   socketAny.violationCount = (socketAny.violationCount || 0) + 1
+  connectionStats.errorsCount++
+  
+  // Socket violation from ${socketAny.userId || 'unknown'}: ${reason}
   
   // Disconnect after 3 violations
   if (socketAny.violationCount >= 3) {
@@ -111,6 +128,18 @@ const handleViolation = (socket: Socket, reason: string) => {
   }
 }
 
+// Rate limiting for socket events
+const checkSocketRateLimit = async (socket: Socket, eventType: string): Promise<boolean> => {
+  const socketAny = socket as any
+  if (!socketAny.userId) return false
+  
+  const key = `socket:${eventType}:${socketAny.userId}`
+  const config = RATE_LIMITS.WEBSOCKET_MESSAGE
+  
+  const result = await checkRateLimit(key, config)
+  return result.allowed
+}
+
 export const initSocket = (res: SocketServer) => {
   if (!res.socket.server.io) {
     const io = new SocketIOServer(res.socket.server, {
@@ -118,36 +147,73 @@ export const initSocket = (res: SocketServer) => {
       addTrailingSlash: false,
       cors: {
         origin: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
-        methods: ["GET", "POST"]
+        methods: ["GET", "POST"],
+        credentials: true
+      },
+      // Performance optimizations for high concurrency
+      transports: ['websocket', 'polling'],
+      pingTimeout: 60000,
+      pingInterval: 25000,
+      upgradeTimeout: 10000,
+      maxHttpBufferSize: 1e6, // 1MB
+      allowEIO3: true,
+      // Connection state recovery
+      connectionStateRecovery: {
+        maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
+        skipMiddlewares: true,
       }
     })
+
+    // Redis adapter for horizontal scaling (optional)
+    if (process.env.REDIS_HOST) {
+      // Redis adapter for Socket.IO not configured. Install @socket.io/redis-adapter for horizontal scaling.
+    }
 
     // Store global reference for broadcasting notifications
     globalIO = io
 
-    // Handle socket connections with authentication
-    io.on('connection', async (socket: Socket) => {
-      const socketAny = socket as any
-      
-      // Authenticate socket on connection
+    // Middleware for authentication and rate limiting
+    io.use(async (socket, next) => {
       const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace('Bearer ', '')
       
       if (!token) {
-        socket.emit('error', { message: 'Authentication required' })
-        socket.disconnect()
-        return
+        return next(new Error('Authentication required'))
+      }
+
+      // Rate limit connection attempts
+      const connectKey = `socket:connect:${socket.handshake.address}`
+      const connectRateLimit = await checkRateLimit(connectKey, RATE_LIMITS.WEBSOCKET_CONNECT)
+      
+      if (!connectRateLimit.allowed) {
+        return next(new Error('Too many connection attempts'))
       }
 
       const isAuthenticated = await authenticateSocket(socket, token)
       
       if (!isAuthenticated) {
-        socket.emit('error', { message: 'Invalid authentication token' })
-        socket.disconnect()
-        return
+        return next(new Error('Invalid authentication token'))
       }
 
+      next()
+    })
+
+    // Handle socket connections with authentication
+    io.on('connection', async (socket: Socket) => {
+      const socketAny = socket as any
+      
+      connectionStats.totalConnections++
+      connectionStats.authenticatedConnections++
+      
+      // Socket connected: ${socketAny.userId} (${connectionStats.authenticatedConnections} active)
+
+      // Heartbeat to track active connections
+      const heartbeatInterval = setInterval(() => {
+        socketAny.lastActivity = Date.now()
+        socket.emit('heartbeat', { timestamp: Date.now() })
+      }, 30000) // 30 seconds
+
       // 1) Join user room - validate userId matches authenticated user
-      socket.on('join-user-room', (userId: string) => {
+      socket.on('join-user-room', async (userId: string) => {
         if (!socketAny.userId) {
           handleViolation(socket, 'Not authenticated')
           return
@@ -158,13 +224,28 @@ export const initSocket = (res: SocketServer) => {
           return
         }
 
+        // Rate limit room joins
+        const allowed = await checkSocketRateLimit(socket, 'join-room')
+        if (!allowed) {
+          handleViolation(socket, 'Rate limit exceeded for room joins')
+          return
+        }
+
         socket.join(`user:${userId}`)
+        socket.emit('room-joined', { room: `user:${userId}` })
       })
 
       // Join project room - validate project membership/permission
       socket.on('join-project-room', async (projectId: string) => {
         if (!socketAny.userId) {
           handleViolation(socket, 'Not authenticated')
+          return
+        }
+
+        // Rate limit room joins
+        const allowed = await checkSocketRateLimit(socket, 'join-room')
+        if (!allowed) {
+          handleViolation(socket, 'Rate limit exceeded for room joins')
           return
         }
 
@@ -175,6 +256,7 @@ export const initSocket = (res: SocketServer) => {
         }
 
         socket.join(`project:${projectId}`)
+        socket.emit('room-joined', { room: `project:${projectId}` })
       })
 
       // 2) Send message - authenticate sender and validate permissions
@@ -184,17 +266,24 @@ export const initSocket = (res: SocketServer) => {
           return
         }
 
+        // Rate limit messages
+        const allowed = await checkSocketRateLimit(socket, 'send-message')
+        if (!allowed) {
+          socket.emit('error', { message: 'Rate limit exceeded for messaging' })
+          return
+        }
+
         // Override any client-supplied senderId with authenticated user ID
         const sanitizedData = {
           ...messageData,
           senderId: socketAny.userId, // Use authenticated user ID
-          text: typeof messageData.text === 'string' ? messageData.text.trim() : '', // Sanitize message
+          text: typeof messageData.text === 'string' ? messageData.text.trim().slice(0, 1000) : '', // Sanitize and limit message length
           sentAt: messageData.sentAt || new Date().toISOString(),
-          attachments: messageData.attachments || []
+          attachments: Array.isArray(messageData.attachments) ? messageData.attachments.slice(0, 5) : [] // Limit attachments
         }
 
         // Validate required fields
-        if (!sanitizedData.projectId || !sanitizedData.receiverId) {
+        if (!sanitizedData.projectId || !sanitizedData.receiverId || !sanitizedData.text) {
           handleViolation(socket, 'Invalid message data')
           return
         }
@@ -211,18 +300,30 @@ export const initSocket = (res: SocketServer) => {
           handleViolation(socket, 'Cannot send message to self')
           return
         }
+
+        connectionStats.messagesSent++
         
         // Broadcast to receiver's personal room (for real-time delivery)
         socket.to(`user:${sanitizedData.receiverId}`).emit('new-message', sanitizedData)
         
         // Also broadcast to project room (for anyone viewing the project)
         socket.to(`project:${sanitizedData.projectId}`).emit('new-message', sanitizedData)
+        
+        // Acknowledge message sent
+        socket.emit('message-sent', { messageId: sanitizedData.id || Date.now() })
       })
 
       // 3) Mark message as read - validate authorization
       socket.on('mark-message-read', async (data) => {
         if (!socketAny.userId) {
           handleViolation(socket, 'Not authenticated for message read')
+          return
+        }
+
+        // Rate limit read operations
+        const allowed = await checkSocketRateLimit(socket, 'mark-read')
+        if (!allowed) {
+          socket.emit('error', { message: 'Rate limit exceeded for read operations' })
           return
         }
 
@@ -263,7 +364,7 @@ export const initSocket = (res: SocketServer) => {
             readBy: socketAny.userId
           })
         } catch (error) {
-          console.error('Error validating message read:', error)
+          // Error validating message read
           handleViolation(socket, 'Message read validation failed')
         }
       })
@@ -273,6 +374,12 @@ export const initSocket = (res: SocketServer) => {
         if (!socketAny.userId) {
           handleViolation(socket, 'Not authenticated for typing indicator')
           return
+        }
+
+        // Rate limit typing indicators
+        const allowed = await checkSocketRateLimit(socket, 'typing')
+        if (!allowed) {
+          return // Silently ignore typing indicators when rate limited
         }
 
         if (data.userId !== socketAny.userId) {
@@ -317,10 +424,37 @@ export const initSocket = (res: SocketServer) => {
         })
       })
 
-      socket.on('disconnect', () => {
-        // User disconnected
+      // Handle heartbeat response
+      socket.on('heartbeat-response', () => {
+        socketAny.lastActivity = Date.now()
+      })
+
+      socket.on('disconnect', (reason) => {
+        connectionStats.authenticatedConnections--
+        clearInterval(heartbeatInterval)
+        // Socket disconnected: ${socketAny.userId} (${reason}) - ${connectionStats.authenticatedConnections} remaining
+      })
+
+      // Handle connection errors
+      socket.on('error', (error) => {
+        connectionStats.errorsCount++
+        // Socket error for user ${socketAny.userId}: ${error}
       })
     })
+
+    // Monitor connection health
+    setInterval(() => {
+      const now = Date.now()
+      const staleThreshold = 5 * 60 * 1000 // 5 minutes
+      
+      io.sockets.sockets.forEach((socket) => {
+        const socketAny = socket as any
+        if (socketAny.lastActivity && (now - socketAny.lastActivity) > staleThreshold) {
+          // Disconnecting stale socket: ${socketAny.userId}
+          socket.disconnect()
+        }
+      })
+    }, 60000) // Check every minute
 
     res.socket.server.io = io
   }

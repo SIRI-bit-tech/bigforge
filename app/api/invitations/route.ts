@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { logError } from '@/lib/logger'
 import { db, invitations, projects, users, notifications } from '@/lib/db'
 import { eq, and, inArray } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
@@ -10,7 +11,7 @@ export async function POST(request: NextRequest) {
     const token = request.cookies.get('auth-token')?.value
 
     if (!token) {
-      console.warn('Invitation creation attempt without authentication token')
+      // Invitation creation attempt without authentication token
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
 
     const payload = verifyJWT(token)
     if (!payload) {
-      console.warn('Invitation creation attempt with invalid token')
+      // Invitation creation attempt with invalid token
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
 
     // Check if the authenticated user is the project owner
     if (project.createdById !== payload.userId) {
-      console.warn(`User ${payload.userId} attempted unauthorized invitation creation for project ${projectId} (owner: ${project.createdById})`)
+      // User attempted unauthorized invitation creation for project
       return NextResponse.json(
         { error: 'Access denied. Only project owners can send invitations.' },
         { status: 403 }
@@ -126,7 +127,7 @@ export async function POST(request: NextRequest) {
       )
       .returning()
 
-    console.log(`User ${payload.userId} successfully sent ${newInvitations.length} invitation(s) for project ${projectId}`)
+    // User successfully sent invitations for project
 
     // Create notifications for invited subcontractors
     for (const subcontractorId of newSubcontractorIds) {
@@ -145,25 +146,14 @@ export async function POST(request: NextRequest) {
         try {
           broadcastNotification(subcontractorId, notification)
         } catch (broadcastError) {
-          console.error('Failed to broadcast notification:', broadcastError)
-          // Continue even if broadcast fails - notification is still saved to database
-        }
-      } catch (notificationError) {
-        console.error('Failed to create notification for subcontractor:', subcontractorId, notificationError)
-        // Continue with other notifications even if one fails
-      }
-    }
+    logError('invitations endpoint error', broadcastError, {
+      endpoint: '/api/invitations',
+      errorType: 'invitations_error',
+      severity: 'high'
+    })
     
-    return NextResponse.json({
-      success: true,
-      invitations: newInvitations,
-      message: `Successfully sent ${newInvitations.length} invitation${newInvitations.length !== 1 ? 's' : ''}`
-    }, { status: 201 })
-
-  } catch (error) {
-    console.error('Failed to send invitations:', error)
     return NextResponse.json(
-      { error: 'Failed to send invitations' },
+      { error: 'Failed to send invitations'  },
       { status: 500 }
     )
   }
@@ -258,9 +248,14 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Failed to fetch invitations:', error)
+    logError('invitations endpoint error', error, {
+      endpoint: '/api/invitations',
+      errorType: 'invitations_error',
+      severity: 'high'
+    })
+    
     return NextResponse.json(
-      { error: 'Failed to fetch invitations' },
+      { error: 'Failed to fetch invitations'  },
       { status: 500 }
     )
   }

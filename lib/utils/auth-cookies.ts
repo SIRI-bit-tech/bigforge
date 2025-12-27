@@ -30,7 +30,7 @@ export function getAuthUserFromCookie(request: NextRequest): AuthUser | null {
       companyId: payload.companyId
     }
   } catch (error) {
-    console.error('Error extracting auth user from cookie:', error)
+    // Error extracting auth user from cookie
     return null
   }
 }

@@ -20,11 +20,11 @@ export default function OpportunitiesPage() {
     const loadData = async () => {
       try {
         setError(null)
-        console.log('Loading projects...')
+        // Loading projects...
         const projects = await loadProjects()
-        console.log('Loaded projects:', projects.length)
+        // Loaded projects
       } catch (error) {
-        console.error('Failed to load projects:', error)
+        // Failed to load projects
         setError('Failed to load projects. Please try again.')
       } finally {
         setLoading(false)

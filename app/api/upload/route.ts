@@ -45,7 +45,15 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error("[v0] File upload error:", error)
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 })
+    logError('upload endpoint error', error, {
+      endpoint: '/api/upload',
+      errorType: 'upload_error',
+      severity: 'high'
+    })
+    
+    return NextResponse.json(
+      { error: "Upload failed"  },
+      { status: 500 }
+    )
   }
 }

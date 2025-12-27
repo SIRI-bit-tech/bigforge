@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { logError } from '@/lib/logger'
 import { db, companies, companyTrades, trades } from '@/lib/db'
 import { eq, count } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
@@ -110,9 +111,14 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Failed to fetch companies:', error)
+    logError('companies endpoint error', error, {
+      endpoint: '/api/companies',
+      errorType: 'companies_error',
+      severity: 'high'
+    })
+    
     return NextResponse.json(
-      { error: 'Failed to fetch companies' },
+      { error: 'Failed to fetch companies'  },
       { status: 500 }
     )
   }

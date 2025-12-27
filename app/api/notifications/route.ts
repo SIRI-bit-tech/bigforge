@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { logError } from '@/lib/logger'
 import { db, notifications } from '@/lib/db'
 import { eq } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
     // Authorization check: Only system/admin roles can create notifications
     // Regular users should not be able to create arbitrary notifications
     if (payload.role !== 'ADMIN' && payload.role !== 'SYSTEM') {
-      console.warn(`User ${payload.userId} with role ${payload.role} attempted to create notification`)
+      // User with non-admin role attempted to create notification
       return NextResponse.json(
         { error: 'Access denied. Only system administrators can create notifications.' },
         { status: 403 }
@@ -69,9 +70,14 @@ export async function POST(request: NextRequest) {
     }, { status: 201 })
 
   } catch (error) {
-    console.error('Failed to create notification:', error)
+    logError('notifications endpoint error', error, {
+      endpoint: '/api/notifications',
+      errorType: 'notifications_error',
+      severity: 'high'
+    })
+    
     return NextResponse.json(
-      { error: 'Failed to create notification' },
+      { error: 'Failed to create notification'  },
       { status: 500 }
     )
   }
@@ -110,9 +116,14 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Failed to fetch notifications:', error)
+    logError('notifications endpoint error', error, {
+      endpoint: '/api/notifications',
+      errorType: 'notifications_error',
+      severity: 'high'
+    })
+    
     return NextResponse.json(
-      { error: 'Failed to fetch notifications' },
+      { error: 'Failed to fetch notifications'  },
       { status: 500 }
     )
   }

@@ -42,7 +42,7 @@ export async function createContext(initialContext: YogaInitialContext): Promise
       userId = decoded.userId
       userRole = decoded.role
     } catch (error) {
-      console.error("[v0] Invalid token:", error)
+      // Invalid token
     }
   }
 

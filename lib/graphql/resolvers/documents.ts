@@ -51,7 +51,7 @@ export const documentResolvers = {
         .values({
           projectId,
           name: fileName,
-          type,
+          type: type as "BLUEPRINT" | "SPECIFICATION" | "CONTRACT" | "ADDENDUM" | "PHOTO" | "OTHER",
           url: fileUrl,
           size: fileSize,
           uploadedById: userId,
@@ -79,7 +79,7 @@ export const documentResolvers = {
         },
       })
 
-      if (!document || document.project.createdById !== userId) {
+      if (!document || (document.project as any)?.createdById !== userId) {
         throw new Error("Document not found or access denied")
       }
 

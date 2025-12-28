@@ -166,3 +166,19 @@ export const emailTemplates = {
     `,
   }),
 }
+
+// Send verification email
+export async function sendVerificationEmail(email: string, url: string) {
+  await sendEmail({
+    to: email,
+    subject: "Verify your BidForge account",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #708090;">Verify Your Email</h2>
+        <p>Please click the link below to verify your email address:</p>
+        <a href="${url}" style="display: inline-block; background: #FF8C42; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 16px 0;">Verify Email</a>
+        <p>If you didn't create an account, you can safely ignore this email.</p>
+      </div>
+    `
+  })
+}

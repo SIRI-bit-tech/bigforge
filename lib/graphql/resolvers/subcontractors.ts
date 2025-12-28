@@ -1,6 +1,6 @@
 import { db } from "@/lib/db"
 import { companies, certifications, insurance } from "@/lib/db/schema"
-import { eq, like } from "drizzle-orm"
+import { eq, like, and } from "drizzle-orm"
 import { cache } from "@/lib/cache/redis"
 
 // Subcontractor resolver for directory and profile queries
@@ -15,14 +15,19 @@ export const subcontractorResolvers = {
       const cached = await cache.get(cacheKey)
       if (cached) return cached
 
-      let query = db.select().from(companies).where(eq(companies.type, "SUBCONTRACTOR")).limit(limit).offset(offset)
+      let whereConditions = [eq(companies.type, "SUBCONTRACTOR")]
 
       // Apply filters
       if (location) {
-        query = query.where(like(companies.address, `%${location}%`))
+        whereConditions.push(like(companies.address, `%${location}%`))
       }
 
-      const results = await query
+      const results = await db
+        .select()
+        .from(companies)
+        .where(and(...whereConditions))
+        .limit(limit)
+        .offset(offset)
 
       // Cache for 5 minutes
       await cache.set(cacheKey, results, 300)

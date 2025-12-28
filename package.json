@@ -12,6 +12,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:indexes": "psql $DATABASE_URL -f drizzle/performance-indexes-enhanced.sql",
+    "health": "curl http://localhost:3000/api/health",
+    "metrics": "curl http://localhost:3000/api/metrics",
     "security:audit": "node scripts/security-audit.js",
     "deploy:production": "bash scripts/deploy-production.sh",
     "monitor": "bash scripts/monitor.sh",

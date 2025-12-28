@@ -153,6 +153,7 @@ bidforge/
 
 ### Prerequisites
 - Node.js 20+ 
+- Bun package manager
 - PostgreSQL database
 - Redis server (optional, for caching)
 - Cloudinary account (for file storage)
@@ -183,6 +184,25 @@ REDIS_URL="redis://localhost:6379"
 SENDGRID_API_KEY="your-sendgrid-api-key"
 SENDGRID_FROM_EMAIL="noreply@bidforge.com"
 
+# Gmail SMTP (Error Monitoring)
+GMAIL_USER="your-gmail@gmail.com"
+GMAIL_APP_PASSWORD="your-app-password"
+GMAIL_HOST="smtp.gmail.com"
+
+# Logging & Monitoring Configuration
+LOG_LEVEL="info"                    # Logging level: error, warn, info, debug
+ENABLE_EMAIL_ALERTS="true"          # Enable email notifications for errors
+NODE_ENV="production"               # Environment: development, production
+ENABLE_RATE_LIMITING="true"         # Enable API rate limiting
+ENABLE_SECURITY_HEADERS="true"      # Enable security headers
+ENABLE_AUDIT_LOGGING="true"         # Enable audit logging
+
+# Security Configuration
+SHOW_PASSWORD_ERRORS="false"        # Show detailed password errors (dev only)
+API_RATE_LIMIT_GENERAL="100"        # General API rate limit (requests/minute)
+API_RATE_LIMIT_AUTH="10"            # Auth API rate limit (requests/minute)
+API_RATE_LIMIT_UPLOAD="10"          # Upload API rate limit (requests/minute)
+
 # GraphQL
 NEXT_PUBLIC_GRAPHQL_URL="http://localhost:3000/api/graphql"
 NEXT_PUBLIC_GRAPHQL_WS_URL="ws://localhost:3000/api/graphql"
@@ -192,32 +212,35 @@ NEXT_PUBLIC_GRAPHQL_WS_URL="ws://localhost:3000/api/graphql"
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/your-org/bidforge.git
+git clone https://github.com/SIRI-bit-tech/bigforge
 cd bidforge
 ```
 
 2. **Install dependencies**
 ```bash
-npm install
+bun install
 ```
 
 3. **Set up the database**
 ```bash
 # Push schema to database
-npm run db:push
+bun run db:push
 
-# (Optional) Run seed script
-npm run db:seed
+# Apply performance indexes for optimal query performance
+psql $DATABASE_URL -f drizzle/performance-indexes-enhanced.sql
+
+# (Optional) Run seed script if available
+# bun run db:seed
 ```
 
-4. **Generate GraphQL types**
+4. **Generate GraphQL types (if codegen is set up)**
 ```bash
-npm run codegen
+# bun run codegen
 ```
 
 5. **Start development server**
 ```bash
-npm run dev
+bun dev
 ```
 
 6. **Open your browser**
@@ -334,26 +357,30 @@ BidForge uses a professional construction industry color palette:
 
 ```bash
 # Development server
-npm run dev
+bun dev
 
 # Production build
-npm run build
+bun run build
 
 # Start production server
-npm start
+bun start
 
 # Database operations
-npm run db:push          # Push schema changes
-npm run db:studio        # Open Drizzle Studio
-npm run db:generate      # Generate migrations
+bun run db:push          # Push schema changes
+bun run db:generate      # Generate migrations
+bun run db:migrate       # Apply migrations
+bun run db:studio        # Open Drizzle Studio
+bun run db:indexes       # Apply performance indexes
 
-# GraphQL operations
-npm run codegen          # Generate TypeScript types
-npm run graphql:schema   # Export GraphQL schema
+# Monitoring & Health
+bun run health           # Check application health
+bun run metrics          # View performance metrics
+
+# Security
+bun run security:audit   # Run security audit
 
 # Code quality
-npm run lint             # Run ESLint
-npm run type-check       # TypeScript checking
+bun run lint             # Run ESLint
 ```
 
 ## Deployment
@@ -374,31 +401,106 @@ npm run type-check       # TypeScript checking
 ### Database Migrations
 ```bash
 # Generate migration
-npm run db:generate
+bun run db:generate
 
 # Apply migrations
-npm run db:push
+bun run db:push
 ```
 
 ## Security
 
-### Authentication
-- JWT-based authentication with secure token storage
-- Role-based access control (CONTRACTOR, SUBCONTRACTOR)
-- Protected API routes with middleware
-- Session management with Better Auth
+### Authentication & Authorization
+- **JWT-based Authentication**: Secure token storage with role-based access control
+- **Role-based Access Control**: CONTRACTOR and SUBCONTRACTOR roles with granular permissions
+- **Protected API Routes**: Middleware-based route protection with automatic redirects
+- **Session Management**: Secure cookie-based session handling
+- **Token Validation**: Comprehensive JWT structure validation with proper base64 encoding checks
 
-### Authorization
-- GraphQL resolver-level authorization checks
-- User can only access their own data
-- Contractors can only manage their projects
-- Subcontractors can only view published projects
+### Data Protection & Input Validation
+- **Password Security**: bcrypt hashing with strength validation and complexity requirements
+- **Input Sanitization**: Comprehensive XSS prevention with HTML sanitization and path traversal protection
+- **SQL Injection Prevention**: Parameterized queries with Drizzle ORM and input validation schemas
+- **File Upload Security**: MIME type validation, size limits, and malicious file detection
+- **Rate Limiting**: API endpoint protection against brute force attacks and abuse
 
-### Data Protection
-- Password hashing with bcrypt
-- Secure file uploads with validation
-- SQL injection prevention with parameterized queries
-- XSS protection with React's built-in escaping
+### Security Headers & CSP
+- **Security Headers**: Comprehensive security headers including X-Frame-Options, X-Content-Type-Options, HSTS
+- **Content Security Policy**: Strict CSP with nonce-based script execution and resource restrictions
+- **CORS Protection**: Proper cross-origin resource sharing configuration
+- **Clickjacking Prevention**: Frame-ancestors directive and X-Frame-Options headers
+
+## Logging & Monitoring
+
+### Winston-based Logging System
+- **Logging Framework**: Winston.js - Professional logging library for Node.js applications
+- **Multi-transport Logging**: Console, file, and email transports for comprehensive coverage
+- **Log Levels**: Configurable logging levels (error, warn, info, debug) with environment-based filtering
+- **Structured Logging**: JSON-formatted logs with metadata for better analysis and searching
+- **Log Rotation**: Automatic log file rotation with size limits (5MB) and retention (5 files)
+
+### Email Alert System
+- **Real-time Error Notifications**: Instant email alerts for all application errors via Gmail SMTP
+- **Rich HTML Formatting**: Detailed error emails with stack traces, request context, and environment info
+- **Smart Filtering**: Production-only email alerts with development override capability
+- **Error Context**: Comprehensive error metadata including user info, request details, and timestamps
+
+### Global Error Handling
+- **API Error Handling**: Centralized error handling for all API endpoints with consistent responses
+- **Uncaught Exception Handling**: Global process-level error catching with graceful shutdown
+- **Client-side Error Monitoring**: React error boundaries with automatic error reporting
+- **Request Logging**: Detailed HTTP request/response logging with performance metrics
+
+### Monitoring Features
+- **Health Check Endpoints**: `/api/health` for application status monitoring
+- **Metrics Collection**: Performance metrics and application statistics via `/api/metrics`
+- **Database Connection Monitoring**: Connection pool health and query performance tracking
+- **Real-time Error Tracking**: Immediate notification system for critical errors
+
+## Database Optimization
+
+### Performance Indexes
+- **Enhanced Indexing Strategy**: Comprehensive database indexes for optimal query performance
+- **Composite Indexes**: Multi-column indexes for complex queries and filtering operations
+- **Foreign Key Indexes**: Optimized relationship queries with proper indexing
+- **Search Optimization**: Full-text search indexes for project and company discovery
+
+### Connection Management
+- **Connection Pooling**: Optimized PostgreSQL connection pool with configurable limits
+- **Query Optimization**: Drizzle ORM with efficient query generation and N+1 prevention
+- **Transaction Management**: Proper transaction handling for data consistency
+- **Database Health Monitoring**: Connection status and performance metrics tracking
+
+### Security Hardening
+- **SQL Injection Prevention**: Parameterized queries and input validation at database level
+- **Access Control**: Database-level user permissions and role-based access
+- **Audit Logging**: Database operation logging for security and compliance
+- **Backup Strategy**: Automated backup procedures with point-in-time recovery
+
+## Anti-Hacker Protection
+
+### Attack Prevention
+- **Rate Limiting**: Multi-tier rate limiting for authentication, API calls, and file uploads
+- **Brute Force Protection**: Account lockout and progressive delays for failed login attempts
+- **DDoS Mitigation**: Request throttling and connection limits to prevent service disruption
+- **Bot Detection**: User-Agent analysis and behavioral pattern recognition
+
+### Input Security
+- **Path Traversal Prevention**: Comprehensive path sanitization with iterative pattern removal
+- **File Upload Security**: Malicious file detection, MIME type validation, and size restrictions
+- **XSS Protection**: Multi-layer XSS prevention with input sanitization and output encoding
+- **CSRF Protection**: Cross-site request forgery prevention with token validation
+
+### Infrastructure Security
+- **Secure Headers**: Complete security header implementation including HSTS and CSP
+- **Environment Protection**: Secure environment variable handling and secrets management
+- **File Permissions**: Proper file system permissions to prevent unauthorized access
+- **Network Security**: Secure communication protocols and encrypted data transmission
+
+### Monitoring & Response
+- **Intrusion Detection**: Automated detection of suspicious activities and attack patterns
+- **Real-time Alerts**: Immediate notification system for security incidents
+- **Audit Trail**: Comprehensive logging of all security-relevant events and user actions
+- **Incident Response**: Automated response procedures for detected security threats
 
 ## Performance Optimizations
 
@@ -413,14 +515,11 @@ npm run db:push
 ## Testing
 
 ```bash
-# Run unit tests
-npm run test
+# Run tests (if test framework is set up)
+# bun test
 
-# Run E2E tests
-npm run test:e2e
-
-# Run type checking
-npm run type-check
+# Run type checking (requires TypeScript configuration)
+# bun run type-check
 ```
 
 ## Contributing

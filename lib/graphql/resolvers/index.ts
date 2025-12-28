@@ -10,7 +10,19 @@ import { subscriptionResolvers } from "./subscriptions"
 import { companyResolvers } from "./companies"
 import { tradeResolvers } from "./trades"
 import { GraphQLScalarType, Kind } from "graphql"
-import GraphQLUpload from "graphql-upload/GraphQLUpload.mjs"
+
+// GraphQL Upload scalar (simplified version)
+const GraphQLUpload = new GraphQLScalarType({
+  name: 'Upload',
+  description: 'The `Upload` scalar type represents a file upload.',
+  serialize: () => {
+    throw new Error('Upload serialization unsupported.')
+  },
+  parseValue: (value: any) => value,
+  parseLiteral: () => {
+    throw new Error('Upload literal unsupported.')
+  },
+})
 
 // Custom scalar for DateTime
 const DateTimeScalar = new GraphQLScalarType({

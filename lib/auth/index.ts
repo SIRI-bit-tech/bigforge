@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth"
 import { db } from "@/lib/db"
-import { users, sessions, accounts, verifications } from "@/lib/db/schema"
+import { users, verificationCodes } from "@/lib/db/schema"
 
 // Better Auth configuration for BidForge
 export const auth = betterAuth({
@@ -9,15 +9,14 @@ export const auth = betterAuth({
     db,
     schema: {
       user: users,
-      session: sessions,
-      account: accounts,
-      verification: verifications,
+      // Note: Better Auth will create its own session and account tables
+      verification: verificationCodes,
     },
   },
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
-    sendEmailVerificationOnSignUp: async ({ user, url }) => {
+    sendEmailVerificationOnSignUp: async ({ user, url }: { user: any; url: string }) => {
       // Email verification is handled by email service
       await sendVerificationEmail(user.email, url)
     },
@@ -48,7 +47,24 @@ export const auth = betterAuth({
   },
 })
 
-import { sendVerificationEmail } from "@/lib/utils/email"
+// Email verification function
+async function sendVerificationEmail(email: string, url: string) {
+  // Import here to avoid circular dependency
+  const { sendEmail, emailTemplates } = await import("@/lib/utils/email")
+  
+  await sendEmail({
+    to: email,
+    subject: "Verify your BidForge account",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #708090;">Verify Your Email</h2>
+        <p>Please click the link below to verify your email address:</p>
+        <a href="${url}" style="display: inline-block; background: #FF8C42; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 16px 0;">Verify Email</a>
+        <p>If you didn't create an account, you can safely ignore this email.</p>
+      </div>
+    `
+  })
+}
 
 // Helper to get current user from session
 export async function getCurrentUser(sessionToken?: string) {

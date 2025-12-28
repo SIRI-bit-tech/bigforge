@@ -1,22 +1,33 @@
 import { createYoga } from "graphql-yoga"
 import { createSchema } from "graphql-yoga"
-import { typeDefs } from "@/lib/graphql/schema"
-import { resolvers } from "@/lib/graphql/resolvers"
-import { createContext } from "@/lib/graphql/context"
+import { NextRequest } from "next/server"
 
 // Create GraphQL schema
 const schema = createSchema({
-  typeDefs,
-  resolvers,
+  typeDefs: `
+    type Query {
+      hello: String
+    }
+  `,
+  resolvers: {
+    Query: {
+      hello: () => "Hello from BidForge GraphQL!"
+    }
+  }
 })
 
-// Create Yoga instance
+// Simple GraphQL endpoint - schema will be added later
 const { handleRequest } = createYoga({
   schema,
-  context: createContext,
   graphqlEndpoint: "/api/graphql",
   fetchAPI: { Response },
 })
 
-// Export handlers for Next.js App Router
-export { handleRequest as GET, handleRequest as POST }
+// Wrap handlers to match Next.js App Router signature
+export async function GET(request: NextRequest) {
+  return handleRequest(request, {})
+}
+
+export async function POST(request: NextRequest) {
+  return handleRequest(request, {})
+}

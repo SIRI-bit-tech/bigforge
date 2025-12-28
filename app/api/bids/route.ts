@@ -6,6 +6,9 @@ import { broadcastNotification } from '@/lib/socket/server'
 import { logError } from '@/lib/logger'
 
 export async function POST(request: NextRequest) {
+  let payload: any
+  let projectId: string | undefined
+  
   try {
     // Authentication check
     const token = request.cookies.get('auth-token')?.value
@@ -18,7 +21,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const payload = verifyJWT(token)
+    payload = verifyJWT(token)
     if (!payload) {
       // Bid submission attempt with invalid token
       return NextResponse.json(
@@ -36,7 +39,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { projectId, totalAmount, notes } = await request.json()
+    const requestBody = await request.json()
+    projectId = requestBody.projectId
+    const { totalAmount, notes } = requestBody
 
     // Validate input
     if (!projectId || !totalAmount || totalAmount <= 0) {
@@ -164,6 +169,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  let payload: any
+  
   try {
     // Authentication check
     const token = request.cookies.get('auth-token')?.value
@@ -175,7 +182,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const payload = verifyJWT(token)
+    payload = verifyJWT(token)
     if (!payload) {
       return NextResponse.json(
         { error: 'Invalid or expired token' },

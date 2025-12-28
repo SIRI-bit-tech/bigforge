@@ -146,14 +146,38 @@ export async function POST(request: NextRequest) {
         try {
           broadcastNotification(subcontractorId, notification)
         } catch (broadcastError) {
-    logError('invitations endpoint error', broadcastError, {
+          // Log broadcast error but don't fail the invitation
+          logError('Notification broadcast error', broadcastError, {
+            endpoint: '/api/invitations',
+            errorType: 'notification_broadcast_error',
+            severity: 'medium'
+          })
+        }
+      } catch (notificationError) {
+        // Log notification creation error but don't fail the invitation
+        logError('Notification creation error', notificationError, {
+          endpoint: '/api/invitations',
+          errorType: 'notification_creation_error',
+          severity: 'medium'
+        })
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Invitations sent to ${newSubcontractorIds.length} subcontractors`,
+      invitedCount: newSubcontractorIds.length
+    })
+
+  } catch (error) {
+    logError('invitations endpoint error', error, {
       endpoint: '/api/invitations',
       errorType: 'invitations_error',
       severity: 'high'
     })
     
     return NextResponse.json(
-      { error: 'Failed to send invitations'  },
+      { error: 'Failed to send invitations' },
       { status: 500 }
     )
   }

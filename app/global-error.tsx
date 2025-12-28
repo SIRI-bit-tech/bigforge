@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { logError } from '@/lib/logger'
+import { logClientError } from '@/lib/client-logger'
 
 export default function GlobalError({
   error,
@@ -12,7 +12,7 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     // Log global client-side errors with email notification
-    logError('Global client-side error', error, {
+    logClientError('Global client-side error', error, {
       errorType: 'global_client_error',
       severity: 'high',
       digest: error.digest,

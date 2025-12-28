@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
   try {
     // Apply rate limiting using shared utility
     const rateLimitKey = getRateLimitKey(request, RATE_LIMITS.RESEND_CODE.keyPrefix)
-    const rateLimit = checkRateLimit(rateLimitKey, RATE_LIMITS.RESEND_CODE)
+    const rateLimit = await checkRateLimit(rateLimitKey, RATE_LIMITS.RESEND_CODE)
     
     if (!rateLimit.allowed) {
       const resetIn = formatTimeRemaining(rateLimit.resetTime!)

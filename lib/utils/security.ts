@@ -136,13 +136,12 @@ export function sanitizePath(path: string): string {
   sanitized = sanitized
     .replace(/[\/\\]+/g, '/') // Normalize separators to forward slash and collapse multiples
     .replace(/\/+/g, '/')     // Collapse multiple forward slashes
-    .replace(/\.+/g, '.')     // Collapse multiple dots to single dot
   
   // Remove dangerous characters
   sanitized = sanitized.replace(/[<>:"|?*]/g, '')
   
-  // Remove leading slashes and dots
-  sanitized = sanitized.replace(/^[\/\\\.]+/, '')
+  // Remove leading and trailing dots and slashes
+  sanitized = sanitized.replace(/^[\/\\\.]+/, '').replace(/[\/\\\.]+$/, '')
   
   // Final cleanup
   sanitized = sanitized.trim()
@@ -304,17 +303,36 @@ export function validateJWTStructure(token: string): boolean {
   if (parts.length !== 3) return false
   
   try {
-    // Validate base64 encoding - compatible with both browser and Node.js
-    parts.forEach(part => {
+    // Validate base64 encoding with proper validation
+    for (const part of parts) {
       const urlSafeBase64 = part.replace(/-/g, '+').replace(/_/g, '/')
+      
+      // Add padding if needed for proper base64
+      const paddedBase64 = urlSafeBase64 + '='.repeat((4 - urlSafeBase64.length % 4) % 4)
+      
+      // Validate base64 format with regex
+      const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/
+      if (!base64Regex.test(paddedBase64)) {
+        return false
+      }
       
       // Use Buffer.from for Node.js compatibility, fallback to atob for browser
       if (typeof Buffer !== 'undefined') {
-        Buffer.from(urlSafeBase64, 'base64')
+        const decoded = Buffer.from(paddedBase64, 'base64')
+        // Verify the decoded length makes sense (not empty for non-empty input)
+        if (paddedBase64.length > 0 && decoded.length === 0) {
+          return false
+        }
+        // Verify round-trip encoding matches (catches invalid characters)
+        const reencoded = decoded.toString('base64')
+        if (reencoded !== paddedBase64) {
+          return false
+        }
       } else {
-        atob(urlSafeBase64)
+        // Browser environment - atob will throw on invalid base64
+        atob(paddedBase64)
       }
-    })
+    }
     return true
   } catch {
     return false

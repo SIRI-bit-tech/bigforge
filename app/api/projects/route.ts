@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, projects, projectTrades, trades } from '@/lib/db'
 import { eq } from 'drizzle-orm'
 import { verifyJWT } from '@/lib/services/auth'
-import { logError } from '@/lib/logger'
 import { handleAPIError } from '@/app/api/error-handler/route'
 
 export async function GET(request: NextRequest) {
+  let payload: any // Hoist payload declaration to make it accessible in catch block
+  
   try {
     // Authentication check
     const token = request.cookies.get('auth-token')?.value
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const payload = verifyJWT(token)
+    payload = verifyJWT(token)
     if (!payload) {
       // Projects fetch attempt with invalid token
       return NextResponse.json(
@@ -135,6 +136,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let payload: any // Hoist payload declaration to make it accessible in catch block
+  
   try {
     // Authentication check
     const token = request.cookies.get('auth-token')?.value
@@ -147,7 +150,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const payload = verifyJWT(token)
+    payload = verifyJWT(token)
     if (!payload) {
       // Project creation attempt with invalid token
       return NextResponse.json(

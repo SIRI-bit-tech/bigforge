@@ -26,13 +26,5 @@ export function handleAPIError(error: Error, request: NextRequest, context?: Rec
   )
 }
 
-// Wrapper function for API route handlers to automatically catch and handle errors
-export function withErrorHandler(handler: (req: NextRequest, context?: any) => Promise<NextResponse>) {
-  return async (req: NextRequest, context?: any) => {
-    try {
-      return await handler(req, context)
-    } catch (error) {
-      return handleAPIError(error as Error, req, context)
-    }
-  }
-}
+// Re-export the canonical withErrorHandler implementation
+export { withErrorHandler } from '@/lib/middleware/error-handler'

@@ -845,6 +845,7 @@ export const useStore = create<AppState>((set, get) => ({
         text: data.text,
         senderId: currentUser.id,
         bidId: data.bidId,
+        attachments: data.attachments, // Include attachments
       }),
     })
 

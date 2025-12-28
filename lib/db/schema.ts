@@ -179,6 +179,7 @@ export const messages = pgTable("messages", {
     .references(() => users.id)
     .notNull(),
   text: text("text").notNull(),
+  attachments: text("attachments"), // JSON field for attachments
   read: boolean("read").default(false),
   sentAt: timestamp("sent_at").defaultNow().notNull(),
 })

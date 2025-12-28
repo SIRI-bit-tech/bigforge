@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
         senderId: messages.senderId,
         receiverId: messages.receiverId,
         text: messages.text,
+        attachments: messages.attachments,
         sentAt: messages.sentAt,
         read: messages.read,
         bidId: messages.bidId,
@@ -63,6 +64,7 @@ export async function GET(request: NextRequest) {
           senderId: messages.senderId,
           receiverId: messages.receiverId,
           text: messages.text,
+          attachments: messages.attachments,
           sentAt: messages.sentAt,
           read: messages.read,
           bidId: messages.bidId,
@@ -81,10 +83,11 @@ export async function GET(request: NextRequest) {
 
     const userMessages = await query.orderBy(desc(messages.sentAt))
 
-    // Convert timestamps to ISO strings for proper JSON serialization
+    // Convert timestamps to ISO strings and parse attachments JSON
     const formattedMessages = userMessages.map(msg => ({
       ...msg,
-      sentAt: msg.sentAt.toISOString()
+      sentAt: msg.sentAt.toISOString(),
+      attachments: msg.attachments ? JSON.parse(msg.attachments) : []
     }))
 
     // User fetched messages
@@ -243,6 +246,7 @@ export async function POST(request: NextRequest) {
         senderId: authenticatedUserId, // Use authenticated user's ID
         receiverId,
         text: text?.trim() || '',
+        attachments: attachments && attachments.length > 0 ? JSON.stringify(attachments) : null,
         bidId: bidId || null,
         read: false,
         sentAt: new Date(),

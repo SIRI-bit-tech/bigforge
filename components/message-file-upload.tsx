@@ -159,9 +159,9 @@ export function AttachmentDisplay({ attachments, onDownload }: AttachmentDisplay
 
   return (
     <div className="mt-2 space-y-2">
-      {attachments.map((attachment) => (
+      {attachments.map((attachment, index) => (
         <div
-          key={attachment.id}
+          key={`${attachment.fileName || attachment.originalName}-${index}`}
           className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg border"
         >
           {getFileIcon(attachment.fileType)}

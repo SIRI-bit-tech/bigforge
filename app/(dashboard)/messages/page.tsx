@@ -366,24 +366,52 @@ export default function MessagesPage() {
 
   const handleDownloadAttachment = async (attachment: MessageAttachment) => {
     try {
-      const response = await fetch(attachment.url)
+      // Check if it's a Cloudinary URL or local URL
+      const isCloudinaryUrl = attachment.url.includes('cloudinary.com') || attachment.url.startsWith('https://res.cloudinary.com')
+      
+      if (!isCloudinaryUrl && attachment.url.startsWith('/uploads/')) {
+        // This is an old local file path that no longer exists
+        toast({
+          title: "File not available",
+          description: "This file was uploaded before our system upgrade and is no longer available for download.",
+          variant: "destructive",
+        })
+        return
+      }
+      
+      const response = await fetch(attachment.url, {
+        method: 'GET',
+        headers: {
+          'Accept': '*/*',
+        },
+      })
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const blob = await response.blob()
       
       // Create download link
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = attachment.originalName
+      a.download = attachment.originalName || 'download'
+      a.style.display = 'none'
       document.body.appendChild(a)
       a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      
+      // Clean up
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+      }, 100)
       
     } catch (error) {
       console.error('Failed to download file:', error)
       toast({
         title: "Download failed",
-        description: "Failed to download the file. Please try again.",
+        description: "Failed to download the file. The file may no longer be available.",
         variant: "destructive",
       })
     }
@@ -400,34 +428,33 @@ export default function MessagesPage() {
   
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Loading messages...</p>
-          </div>
+      <div className="h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading messages...</p>
         </div>
       </div>
     )
   }
   
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
+    <div className="fixed inset-0 lg:relative lg:h-auto flex flex-col lg:container lg:mx-auto lg:px-4 lg:py-8">
+      {/* Header - Only show on desktop or when conversations list is visible on mobile */}
+      <div className={`mb-4 lg:mb-8 px-4 py-4 lg:px-0 lg:py-0 ${!showConversationsList ? 'hidden lg:block' : ''}`}>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">Messages</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl lg:text-3xl font-bold text-foreground mb-2">Messages</h1>
+            <p className="text-sm lg:text-base text-muted-foreground">
               Communicate with {currentUser.role === "CONTRACTOR" ? "subcontractors" : "contractors"} about your projects
             </p>
           </div>
         </div>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 lg:gap-6 h-full lg:h-[calc(100vh-200px)] overflow-hidden">
         {/* Conversations List - Show/hide based on mobile state */}
-        <Card className={`lg:col-span-1 ${!showConversationsList ? 'hidden lg:block' : ''}`}>
-          <CardHeader className="pb-4">
+        <Card className={`lg:col-span-1 h-full flex flex-col ${!showConversationsList ? 'hidden lg:flex' : ''} border-0 lg:border rounded-none lg:rounded-lg`}>
+          <CardHeader className="pb-4 flex-shrink-0">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg">Conversations</CardTitle>
               <Button 
@@ -456,8 +483,8 @@ export default function MessagesPage() {
               />
             </div>
           </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[calc(100vh-320px)]">
+          <CardContent className="p-0 flex-1 overflow-hidden">
+            <ScrollArea className="h-full">
               {filteredConversations.length > 0 ? (
                 <div className="space-y-1">
                   {filteredConversations.map((conversation) => {
@@ -523,11 +550,11 @@ export default function MessagesPage() {
         </Card>
         
         {/* Chat Area - Show/hide based on mobile state */}
-        <Card className={`lg:col-span-2 ${showConversationsList ? 'hidden lg:block' : ''}`}>
+        <div className={`lg:col-span-2 h-full flex flex-col ${showConversationsList ? 'hidden lg:flex' : ''} bg-background lg:bg-card lg:border lg:rounded-lg overflow-hidden`}>
           {selectedConv ? (
             <>
-              {/* Chat Header with Back Button for Mobile */}
-              <CardHeader className="pb-4">
+              {/* Chat Header with Back Button for Mobile - Fixed at top */}
+              <div className="flex-shrink-0 p-4 border-b bg-background lg:bg-card">
                 <div className="flex items-center gap-3">
                   {/* Back button for mobile */}
                   <Button
@@ -544,20 +571,18 @@ export default function MessagesPage() {
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <CardTitle className="text-lg">{selectedConv.otherUser.name}</CardTitle>
-                    <CardDescription className="text-sm">
+                    <h2 className="text-lg font-semibold">{selectedConv.otherUser.name}</h2>
+                    <p className="text-sm text-muted-foreground">
                       Project: {selectedConv.project.title}
-                    </CardDescription>
+                    </p>
                   </div>
                 </div>
-              </CardHeader>
+              </div>
               
-              <Separator />
-              
-              {/* Messages */}
-              <CardContent className="p-0">
-                <ScrollArea className="h-[calc(100vh-400px)] p-4">
-                  <div className="space-y-4">
+              {/* Messages Area - Only this scrolls */}
+              <div className="flex-1 overflow-hidden">
+                <div className="h-full overflow-y-auto">
+                  <div className="p-4 space-y-4 min-h-full">
                     {selectedConv.messages
                       .filter((message, index, array) => 
                         array.findIndex(m => m.id === message.id) === index
@@ -570,40 +595,42 @@ export default function MessagesPage() {
                             key={`${message.id}-${index}`}
                             className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
                           >
-                          <div className={`max-w-[70%] ${isOwn ? 'order-2' : 'order-1'}`}>
-                            <div
-                              className={`rounded-lg px-4 py-2 ${
-                                isOwn
-                                  ? 'bg-primary text-primary-foreground'
-                                  : 'bg-muted text-foreground'
-                              }`}
-                            >
-                              {message.text && <p className="text-sm">{message.text}</p>}
-                              
-                              {/* Display attachments */}
-                              <AttachmentDisplay 
-                                attachments={message.attachments || []}
-                                onDownload={handleDownloadAttachment}
-                              />
-                            </div>
-                            <div className={`flex items-center gap-1 mt-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                              <Clock className="h-3 w-3 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">
-                                {message.sentAt ? formatDistanceToNow(new Date(message.sentAt), { addSuffix: true }) : 'Unknown time'}
-                              </span>
-                              {isOwn && message.read && (
-                                <CheckCheck className="h-3 w-3 text-muted-foreground ml-1" />
-                              )}
+                            <div className={`max-w-[85%] sm:max-w-[70%] ${isOwn ? 'order-2' : 'order-1'}`}>
+                              <div
+                                className={`rounded-lg px-4 py-2 ${
+                                  isOwn
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'bg-muted text-foreground'
+                                }`}
+                              >
+                                {message.text && <p className="text-sm">{message.text}</p>}
+                                
+                                {/* Display attachments */}
+                                <AttachmentDisplay 
+                                  attachments={message.attachments || []}
+                                  onDownload={handleDownloadAttachment}
+                                />
+                              </div>
+                              <div className={`flex items-center gap-1 mt-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                                <Clock className="h-3 w-3 text-muted-foreground" />
+                                <span className="text-xs text-muted-foreground">
+                                  {message.sentAt ? formatDistanceToNow(new Date(message.sentAt), { addSuffix: true }) : 'Unknown time'}
+                                </span>
+                                {isOwn && message.read && (
+                                  <CheckCheck className="h-3 w-3 text-muted-foreground ml-1" />
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
                   </div>
-                </ScrollArea>
-                
-                {/* Message Input */}
-                <div className="p-4 border-t space-y-3">
+                </div>
+              </div>
+              
+              {/* Message Input - Fixed at bottom, never scrolls */}
+              <div className="flex-shrink-0 border-t bg-background lg:bg-card">
+                <div className="p-4 space-y-3">
                   {/* File Upload */}
                   <MessageFileUpload
                     onFileSelect={handleFileSelect}
@@ -632,18 +659,18 @@ export default function MessagesPage() {
                     </Button>
                   </div>
                 </div>
-              </CardContent>
+              </div>
             </>
           ) : (
-            <CardContent className="flex items-center justify-center h-full">
+            <div className="flex items-center justify-center h-full">
               <div className="text-center text-muted-foreground">
                 <MessageSquare className="h-16 w-16 mx-auto mb-4 opacity-50" />
                 <h3 className="text-lg font-medium mb-2">Select a conversation</h3>
                 <p>Choose a conversation from the list to start messaging</p>
               </div>
-            </CardContent>
+            </div>
           )}
-        </Card>
+        </div>
       </div>
     </div>
   )

@@ -54,12 +54,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Button
               variant="ghost"
               size="icon"
-              className="lg:hidden fixed top-20 left-4 z-40 bg-background border border-border shadow-md"
+              className="lg:hidden fixed top-4 right-4 z-40 bg-background border border-border shadow-md"
             >
               <Menu className="h-5 w-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-64 p-0">
+          <SheetContent side="right" className="w-64 p-0">
             <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
             <SheetDescription className="sr-only">
               Access the main navigation menu for the dashboard
